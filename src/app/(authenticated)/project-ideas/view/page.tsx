@@ -1,7 +1,7 @@
 // src/app/(authenticated)/project-ideas/view/page.tsx
 "use client";
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -20,7 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
-export default function ViewProjectProposalPage() {
+function ViewProjectProposalContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { user } = useAuth();
@@ -531,5 +531,17 @@ export default function ViewProjectProposalPage() {
                 </Card>
             )}
         </div>
+    );
+}
+
+export default function ViewProjectProposalPage() {
+    return (
+        <Suspense fallback={
+            <div className="flex justify-center items-center h-[calc(100vh-10rem)]">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            </div>
+        }>
+            <ViewProjectProposalContent />
+        </Suspense>
     );
 }

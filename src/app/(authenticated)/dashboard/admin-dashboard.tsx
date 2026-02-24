@@ -252,39 +252,39 @@ export function AdminDashboard({ user }: AdminDashboardProps) {
       </div>
 
       <Card className="shadow-lg">
-        <CardHeader>
+        <CardHeader className="p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex-1">
-              <CardTitle className="font-headline text-xl flex items-center">
-                <Award className="mr-2 h-6 w-6 text-accent" /> Member Participation
+              <CardTitle className="font-headline text-lg sm:text-xl flex items-center">
+                <Award className="mr-2 h-5 sm:h-6 w-5 sm:w-6 text-accent" /> Member Participation
               </CardTitle>
-              <CardDescription>View member attendance records, filtered by period.</CardDescription>
+              <CardDescription className="text-xs sm:text-sm">View member attendance records, filtered by period.</CardDescription>
             </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-2 w-full sm:w-auto">
-              <div className="flex items-center gap-2 sm:hidden">
-                 <Filter className="h-5 w-5 text-primary" />
-                 <span className="font-medium text-sm">Filter by:</span>
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row sm:items-end sm:gap-2 w-full sm:w-auto">
+              <div className="col-span-2 flex items-center gap-2 sm:hidden mb-1">
+                 <Filter className="h-4 w-4 text-primary" />
+                 <span className="font-medium text-xs">Filter by:</span>
               </div>
-              <div className="flex-1 sm:flex-none sm:min-w-[180px]">
-                <Label htmlFor="filter-month" className="text-xs font-medium text-muted-foreground">Month</Label>
+              <div className="flex-1 sm:flex-none sm:min-w-[150px]">
+                <Label htmlFor="filter-month" className="text-[10px] sm:text-xs font-medium text-muted-foreground">Month</Label>
                 <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                  <SelectTrigger id="filter-month" className="w-full bg-background mt-1">
-                    <SelectValue placeholder="Select Month" />
+                  <SelectTrigger id="filter-month" className="w-full bg-background mt-0.5 h-8 sm:h-9 text-xs sm:text-sm">
+                    <SelectValue placeholder="Month" />
                   </SelectTrigger>
                   <SelectContent>
-                    {months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                    {months.map(m => <SelectItem key={m.value} value={m.value} className="text-xs sm:text-sm">{m.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex-1 sm:flex-none sm:min-w-[120px]">
-                <Label htmlFor="filter-year" className="text-xs font-medium text-muted-foreground">Year</Label>
+              <div className="flex-1 sm:flex-none sm:min-w-[100px]">
+                <Label htmlFor="filter-year" className="text-[10px] sm:text-xs font-medium text-muted-foreground">Year</Label>
                 <Select value={selectedYear} onValueChange={setSelectedYear}>
-                  <SelectTrigger id="filter-year" className="w-full bg-background mt-1">
-                    <SelectValue placeholder="Select Year" />
+                  <SelectTrigger id="filter-year" className="w-full bg-background mt-0.5 h-8 sm:h-9 text-xs sm:text-sm">
+                    <SelectValue placeholder="Year" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Years</SelectItem>
-                    {availableYears.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+                    <SelectItem value="all" className="text-xs sm:text-sm">All Years</SelectItem>
+                    {availableYears.map(y => <SelectItem key={y} value={y} className="text-xs sm:text-sm">{y}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

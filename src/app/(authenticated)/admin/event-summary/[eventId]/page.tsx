@@ -12,9 +12,8 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, CalendarDays, MapPin, Info, Users, Printer, ArrowLeft, Mail, UserCircle, Briefcase, Star, MessageSquare, ClipboardCopy } from 'lucide-react';
+import { Loader2, CalendarDays, MapPin, Info, Users, ArrowLeft, Mail, Star, MessageSquare, ClipboardCopy, FileDown } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
-import { useReactToPrint } from 'react-to-print';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +21,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
+import { useReactToPrint } from 'react-to-print'
 
 export default function EventSummaryPage() {
   const params = useParams();
@@ -36,41 +37,47 @@ export default function EventSummaryPage() {
 
   const componentRef = useRef<HTMLDivElement>(null);
 
-  const handlePrint = useReactToPrint({
-    content: () => componentRef.current,
-    documentTitle: event ? `Event Summary - ${event.name}` : 'Event Summary',
-  });
-
   const handleDownloadPDF = () => {
-    if (!event) return;
-    const doc = new jsPDF();
+        const input = componentRef.current;
+        if (!input || !event) {
+            toast({
+                title: "Error",
+                description: "Could not find content to download.",
+                variant: "destructive",
+            });
+            return;
+        }
 
-    doc.setFontSize(20);
-    doc.text(`Event Summary: ${event.name}`, 14, 22);
-    doc.setFontSize(12);
-    doc.setTextColor(100);
-    doc.text(`Date: ${formattedEventDate}`, 14, 30);
-    doc.text(`Location: ${event.location}`, 14, 36);
-    
-    autoTable(doc, {
-        head: [['Type', 'Name', 'Role/Designation', 'Email/Club', 'Comment', 'Timestamp']],
-        body: participantsSummary.map(p => {
-            const timestamp = p.attendanceTimestamp && isValid(parseISO(p.attendanceTimestamp))
-                ? format(parseISO(p.attendanceTimestamp), "PPpp")
-                : 'N/A';
-            if (p.type === 'member') {
-                return ['Member', p.userName || 'N/A', p.userDesignation || p.userRole || 'Member', p.userEmail || 'N/A', 'N/A', timestamp];
-            } else {
-                return ['Visitor', p.visitorName || 'N/A', p.visitorDesignation || 'N/A', p.visitorClub || 'N/A', p.visitorComment || 'N/A', timestamp];
+        toast({ title: "Generating PDF...", description: "Please wait a moment." });
+
+        html2canvas(input, { scale: 2, useCORS: true, logging: false }).then((canvas) => {
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const canvasWidth = canvas.width;
+            const canvasHeight = canvas.height;
+            const ratio = canvasWidth / canvasHeight;
+            const imgWidth = pdfWidth - 20; // with margin
+            let imgHeight = imgWidth / ratio;
+            let heightLeft = imgHeight;
+            let position = 10; // top margin
+
+            pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+            heightLeft -= (pdf.internal.pageSize.getHeight() - 20);
+
+            while (heightLeft > 0) {
+                position = -heightLeft + 10;
+                pdf.addPage();
+                pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+                heightLeft -= (pdf.internal.pageSize.getHeight() - 20);
             }
-        }),
-        startY: 45,
-        styles: { fontSize: 8 },
-        headStyles: { fillColor: [37, 99, 235] },
-    });
-    
-    doc.save(`Event_Summary_${event.name.replace(/\s/g, '_')}.pdf`);
-  };
+            pdf.save(`Event_Summary_${event.name.replace(/\s/g, '_')}.pdf`);
+             toast({ title: "PDF Generated", description: "Your summary is downloading." });
+        }).catch(err => {
+             console.error("Failed to generate PDF:", err);
+             toast({ title: "PDF Generation Failed", description: "An error occurred while creating the PDF.", variant: "destructive" });
+        });
+    };
 
   const getInitials = (name?: string) => {
     if (!name) return "??";
@@ -151,12 +158,13 @@ export default function EventSummaryPage() {
   let formattedEventDate = "Date unavailable";
   if (event?.startDate && isValid(parseISO(event.startDate))) {
     const eventStartDateObj = parseISO(event.startDate);
-    formattedEventDate = format(eventStartDateObj, "MMMM d, yyyy 'at' h:mm a");
+    formattedEventDate = format(eventStartDateObj, "MMMM d, yyyy, h:mm a");
     if (event.endDate && isValid(parseISO(event.endDate))) {
         const eventEndDateObj = parseISO(event.endDate);
-        if (eventEndDateObj.toDateString() !== eventStartDateObj.toDateString() || 
-            (eventEndDateObj.getHours() !== eventStartDateObj.getHours() || eventEndDateObj.getMinutes() !== eventStartDateObj.getMinutes())) {
-             formattedEventDate += ` - ${format(eventEndDateObj, "h:mm a")}`;
+        if (eventEndDateObj.toDateString() !== eventStartDateObj.toDateString()) {
+             formattedEventDate = `${format(eventStartDateObj, "MMM d, h:mm a")} - ${format(eventEndDateObj, "MMM d, h:mm a")}`;
+        } else {
+             formattedEventDate = `${format(eventStartDateObj, "MMM d, yyyy, h:mm a")} - ${format(eventEndDateObj, "h:mm a")}`;
         }
     }
   }
@@ -266,13 +274,10 @@ export default function EventSummaryPage() {
         </div>
         <div className="flex flex-col sm:flex-row gap-2 print:hidden w-full sm:w-auto">
             <button onClick={handleCopySummary} className={cn(buttonVariants({ variant: "outline" }), "w-full sm:w-auto")}>
-              <ClipboardCopy className="mr-2 h-4 w-4" /> Copy Summary
-            </button>
-            <button onClick={handlePrint} className={cn(buttonVariants({}), "w-full sm:w-auto")}>
-              <Printer className="mr-2 h-4 w-4" /> Print
+              <ClipboardCopy className="mr-2 h-4 w-4" /> Copy
             </button>
             <button onClick={handleDownloadPDF} className={cn(buttonVariants({}), "w-full sm:w-auto")}>
-              <Printer className="mr-2 h-4 w-4" /> PDF
+              <FileDown className="mr-2 h-4 w-4" /> PDF
             </button>
         </div>
       </div>

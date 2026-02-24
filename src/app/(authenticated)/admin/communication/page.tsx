@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
-import { Mail, Users, Send, Loader2, Sparkles, Search, Info, Edit, PlusCircle, Settings, Trash2, Paperclip, X } from "lucide-react";
+import { Mail, Users, Send, Loader2, Sparkles, Search, Info, Edit, PlusCircle, Settings, Trash2, Paperclip, X, Bell, Terminal } from "lucide-react";
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { generateCommunication, type GenerateCommunicationInput } from '@/ai/flows/generate-communication-flow';
@@ -327,6 +327,32 @@ export default function CommunicationPage() {
   }
   
   const totalAttachmentSize = watchedAttachments.reduce((acc, file) => acc + file.size, 0);
+
+  const testLocalNotification = () => {
+    if (!("Notification" in window)) {
+      toast({ title: "Not Supported", description: "This browser does not support desktop notifications.", variant: "destructive" });
+      return;
+    }
+
+    if (Notification.permission === "granted") {
+      new Notification("LeoPortal Test", {
+        body: "Local notification is working correctly!",
+        icon: "/icon-192x192.png"
+      });
+      toast({ title: "Success", description: "Local notification triggered." });
+    } else if (Notification.permission !== "denied") {
+      Notification.requestPermission().then(permission => {
+        if (permission === "granted") {
+          new Notification("LeoPortal Test", {
+            body: "Local notification is working correctly!",
+            icon: "/icon-192x192.png"
+          });
+        }
+      });
+    } else {
+      toast({ title: "Permission Denied", description: "Notifications are blocked. Please enable them in your browser settings.", variant: "destructive" });
+    }
+  };
   
   return (
     <div className="container mx-auto py-4 sm:py-8 space-y-6">
@@ -503,6 +529,67 @@ export default function CommunicationPage() {
           <div className="flex justify-end"><Button type="submit" className="w-full sm:w-auto" disabled={formSubmitting || isLoadingData || watchedRecipients.length === 0} size="lg">{formSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}{formSubmitting ? "Sending..." : `Send Email to ${watchedRecipients.length} Member(s)`}</Button></div>
         </form>
       </Form>
+
+      <Card className="shadow-lg border-dashed">
+        <CardHeader>
+          <CardTitle className="flex items-center text-xl">
+            <Bell className="mr-2 h-5 w-5 text-primary" /> Test PWA Notifications
+          </CardTitle>
+          <CardDescription>Verify if push notifications are configured correctly on your device.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1 space-y-2">
+              <h3 className="text-sm font-semibold flex items-center">
+                Step 1: Test Browser Permission
+              </h3>
+              <p className="text-xs text-muted-foreground">Check if your browser can show basic notifications while the app is open.</p>
+              <Button type="button" variant="outline" size="sm" onClick={testLocalNotification}>
+                Trigger Local Test Notification
+              </Button>
+            </div>
+            <div className="flex-1 space-y-2">
+              <h3 className="text-sm font-semibold flex items-center">
+                Step 2: Test Background Push (Virtual)
+              </h3>
+              <p className="text-xs text-muted-foreground">Simulate a real background push notification using Chrome DevTools.</p>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button type="button" variant="secondary" size="sm">
+                    <Terminal className="mr-2 h-4 w-4" /> View DevTools Instructions
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Virtual Push Test Guide</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 text-sm leading-relaxed">
+                    <ol className="list-decimal list-inside space-y-3">
+                      <li>Open this PWA in Chrome on your desktop.</li>
+                      <li>Open DevTools (press <strong>F12</strong> or <strong>Right-click &gt; Inspect</strong>).</li>
+                      <li>Navigate to the <strong>Application</strong> tab.</li>
+                      <li>Select <strong>Service Workers</strong> in the left sidebar.</li>
+                      <li>Find <strong>firebase-messaging-sw.js</strong> in the list.</li>
+                      <li>In the <strong>Push</strong> input box, paste this snippet:
+                        <pre className="mt-2 p-2 bg-muted rounded-md overflow-x-auto text-[10px]">
+                          {`{ "notification": { "title": "LEO Portal", "body": "It works! Push received.", "icon": "/icon-192x192.png" } }`}
+                        </pre>
+                      </li>
+                      <li>Click the <strong>Push</strong> button in DevTools.</li>
+                    </ol>
+                    <Alert variant="default" className="bg-primary/5 border-primary/10">
+                      <Info className="h-4 w-4" />
+                      <AlertDescription className="text-xs">
+                        If successful, a notification will appear even if the tab is hidden. This confirms the Service Worker is correctly processing push events.
+                      </AlertDescription>
+                    </Alert>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
        <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
         <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete the "{groupToDelete?.name}" group. This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteGroup} className={cn(buttonVariants({ variant: "destructive" }))}>{isGroupSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
       </AlertDialog>

@@ -592,25 +592,25 @@ export default function MemberManagementPage() {
               <div className="block md:hidden space-y-3">
                 {paginatedMembers.map((memberItem) => (
                     <Card key={memberItem.id} className="shadow-sm data-[state=selected]:bg-muted/50" data-state={selectedRows.includes(memberItem.id) && "selected"}>
-                      <CardContent className="p-4 flex items-start space-x-4">
+                      <CardContent className="p-3 sm:p-4 flex items-start space-x-3 sm:space-x-4">
                         <Checkbox onCheckedChange={(checked) => handleSelectRow(memberItem.id, checked as boolean)} checked={selectedRows.includes(memberItem.id)} aria-label="Select row" className="mt-2"/>
-                        <div className="flex items-start space-x-3 flex-grow">
-                            <Avatar className="h-10 w-10"><AvatarImage src={memberItem.photoUrl} alt={memberItem.name} data-ai-hint="profile avatar" /><AvatarFallback className="bg-primary/20 text-primary font-semibold">{getInitials(memberItem.name)}</AvatarFallback></Avatar>
+                        <div className="flex items-start space-x-2 sm:space-x-3 flex-grow">
+                            <Avatar className="h-9 w-9 sm:h-10 sm:w-10"><AvatarImage src={memberItem.photoUrl} alt={memberItem.name} data-ai-hint="profile avatar" /><AvatarFallback className="bg-primary/20 text-primary font-semibold text-xs sm:text-sm">{getInitials(memberItem.name)}</AvatarFallback></Avatar>
                             <div className="flex-grow min-w-0">
-                                <p className="font-semibold text-primary truncate">{memberItem.name}</p>
-                                <p className="text-xs text-muted-foreground truncate flex items-center"><Mail className="h-3 w-3 mr-1"/> {memberItem.email}</p>
-                                <div className="mt-2 flex items-center gap-2 flex-wrap">
-                                    <Badge variant="outline" className="text-xs capitalize"><Briefcase className="mr-1 h-3 w-3" /> {memberItem.designation || 'Not Set'}</Badge>
-                                    <Badge variant={memberItem.role === 'admin' || memberItem.role === 'super_admin' ? 'default' : 'secondary'} className={`text-xs ${memberItem.role === 'admin' || memberItem.role === 'super_admin' ? 'bg-primary/80' : ''}`}>{memberItem.role.replace('_', ' ')}</Badge>
-                                    <Badge variant="outline" className={cn("capitalize text-xs", getFeeStatusVariant(memberItem.membershipFeeStatus))}>{memberItem.membershipFeeStatus || 'pending'}</Badge>
+                                <p className="font-semibold text-primary truncate text-sm sm:text-base">{memberItem.name}</p>
+                                <p className="text-[10px] sm:text-xs text-muted-foreground truncate flex items-center"><Mail className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-1"/> {memberItem.email}</p>
+                                <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                                    <Badge variant="outline" className="text-[10px] sm:text-xs capitalize h-5 px-1.5"><Briefcase className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" /> {memberItem.designation || 'Not Set'}</Badge>
+                                    <Badge variant={memberItem.role === 'admin' || memberItem.role === 'super_admin' ? 'default' : 'secondary'} className={`text-[10px] sm:text-xs h-5 px-1.5 ${memberItem.role === 'admin' || memberItem.role === 'super_admin' ? 'bg-primary/80' : ''}`}>{memberItem.role.replace('_', ' ')}</Badge>
+                                    <Badge variant="outline" className={cn("capitalize text-[10px] sm:text-xs h-5 px-1.5", getFeeStatusVariant(memberItem.membershipFeeStatus))}>{memberItem.membershipFeeStatus || 'pending'}</Badge>
                                 </div>
                             </div>
                         </div>
                       </CardContent>
-                      <CardFooter className="flex justify-end space-x-2 pt-2 pb-3 px-3 border-t">
-                          <Button variant="outline" size="sm" onClick={() => handleOpenFeeModal(memberItem)} disabled={isImporting || isSubmitting}><CreditCard className="mr-1 h-3.5 w-3.5" /> Update Fee</Button>
-                          <Button variant="outline" size="sm" onClick={() => handleOpenEditForm(memberItem)} disabled={isImporting || isSubmitting}><Edit className="mr-1 h-3.5 w-3.5" /> Edit</Button>
-                          <Button variant="destructive" size="sm" onClick={() => handleSingleDelete(memberItem)} disabled={isImporting || isSubmitting || memberItem.id === user?.id}><Trash2 className="mr-1 h-3.5 w-3.5" /> Delete</Button>
+                      <CardFooter className="flex flex-wrap justify-end gap-1.5 sm:gap-2 pt-2 pb-3 px-3 border-t">
+                          <Button variant="outline" size="sm" className="h-8 text-[11px] sm:text-xs px-2 flex-grow sm:flex-grow-0" onClick={() => handleOpenFeeModal(memberItem)} disabled={isImporting || isSubmitting}><CreditCard className="mr-1 h-3 w-3" /> Fee</Button>
+                          <Button variant="outline" size="sm" className="h-8 text-[11px] sm:text-xs px-2 flex-grow sm:flex-grow-0" onClick={() => handleOpenEditForm(memberItem)} disabled={isImporting || isSubmitting}><Edit className="mr-1 h-3 w-3" /> Edit</Button>
+                          <Button variant="destructive" size="sm" className="h-8 text-[11px] sm:text-xs px-2 flex-grow sm:flex-grow-0" onClick={() => handleSingleDelete(memberItem)} disabled={isImporting || isSubmitting || memberItem.id === user?.id}><Trash2 className="mr-1 h-3 w-3" /> Delete</Button>
                       </CardFooter>
                     </Card>
                 ))}
@@ -636,8 +636,18 @@ export default function MemberManagementPage() {
 
       <AlertDialog open={isBulkDeleteAlertOpen} onOpenChange={setIsBulkDeleteAlertOpen}>
         <AlertDialogContent>
-          <AlertDialogHeader><AlertDialogTitle>Delete Multiple Users?</AlertDialogTitle><AlertDialogDescription>This will permanently remove the profiles for the <strong>{selectedRows.length} selected users}</strong>. This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
-          <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={confirmBulkDelete} className="bg-destructive hover:bg-destructive/90">Yes, delete selected</AlertDialogAction></AlertDialogFooter>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Multiple Users?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the profiles for the <strong>{selectedRows.length} selected users</strong>. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmBulkDelete} className="bg-destructive hover:bg-destructive/90">
+              Yes, delete selected
+            </AlertDialogAction>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
       

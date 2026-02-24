@@ -11,7 +11,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from "@/components/ui/sidebar";
-import { LayoutDashboard, CalendarDays, Users, FileText, Mail, Lightbulb, HandCoins, Settings, Trophy, BarChart, Calendar } from "lucide-react"; 
+import { LayoutDashboard, CalendarDays, Users, FileText, Mail, Lightbulb, HandCoins, Settings, Trophy, BarChart, Calendar, ListChecks } from "lucide-react"; 
 import type { AdminPermission } from "@/types";
 
 interface NavItem {
@@ -26,11 +26,13 @@ const memberNavItems: NavItem[] = [
   { href: "/calendar", label: "Calendar", icon: Calendar },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
   { href: "/project-ideas", label: "Project Ideas", icon: Lightbulb },
+  { href: "/tasks", label: "My Tasks", icon: ListChecks },
 ];
 
 const adminNavItems: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/calendar", label: "Calendar", icon: Calendar },
+  { href: "/tasks", label: "Tasks", icon: ListChecks },
   { href: "/members", label: "Members", icon: Users, permission: 'members' },
   { href: "/events", label: "Events", icon: CalendarDays, permission: 'events' },
   { href: "/admin/finance", label: "Finance", icon: HandCoins, permission: 'finance' },

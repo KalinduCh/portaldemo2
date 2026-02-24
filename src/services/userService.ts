@@ -1,4 +1,3 @@
-
 // src/services/userService.ts
 import { doc, setDoc, getDoc, serverTimestamp, Timestamp, updateDoc, deleteDoc, collection, query, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase/clientApp';
@@ -30,7 +29,7 @@ export async function createUserProfile(
     photoUrl: photoUrl || `https://placehold.co/100x100.png?text=${placeholderChar}`,
     membershipFeeStatus: 'pending',
     membershipFeeAmountPaid: 0,
-    permissions: role === 'admin' ? { // Default permissions for new admins
+    permissions: role === 'admin' ? { 
         members: true,
         events: true,
         finance: true,
@@ -65,13 +64,14 @@ export async function getUserProfile(uid: string): Promise<User | null> {
         email: data.email,
         photoUrl: data.photoUrl || `https://placehold.co/100x100.png?text=${placeholderChar}`,
         role: data.role,
-        status: data.status || 'approved', // Default to 'approved' for backward compatibility
+        status: data.status || 'approved', 
         designation: data.designation,
         nic: data.nic,
         dateOfBirth: data.dateOfBirth,
         gender: data.gender,
         mobileNumber: data.mobileNumber,
-        fcmToken: data.fcmToken, // Add fcmToken
+        fcmToken: data.fcmToken, 
+        pushSubscription: data.pushSubscription, // Include pushSubscription
         membershipFeeStatus: data.membershipFeeStatus || 'pending',
         membershipFeeAmountPaid: data.membershipFeeAmountPaid || 0,
         permissions: data.permissions || {},
@@ -106,6 +106,7 @@ export async function getAllUsers(): Promise<User[]> {
             gender: data.gender,
             mobileNumber: data.mobileNumber,
             fcmToken: data.fcmToken,
+            pushSubscription: data.pushSubscription,
             membershipFeeStatus: data.membershipFeeStatus || 'pending',
             membershipFeeAmountPaid: data.membershipFeeAmountPaid || 0,
             permissions: data.permissions || {},
@@ -123,7 +124,7 @@ export async function updateUserProfile(uid: string, data: Partial<User>): Promi
   const updateData: { [key: string]: any } = { ...data };
   
   delete updateData.id; 
-  delete updateData.createdAt; // Prevent createdAt from being updated
+  delete updateData.createdAt; 
   
   Object.keys(updateData).forEach(key => {
     if (updateData[key] === undefined) {
@@ -140,7 +141,6 @@ export async function approveUser(uid: string): Promise<void> {
     await updateUserProfile(uid, { status: 'approved' });
 }
 
-// New function to explicitly reject a user by changing their status
 export async function rejectUser(uid: string): Promise<void> {
     await updateUserProfile(uid, { status: 'rejected' });
 }
@@ -148,6 +148,11 @@ export async function rejectUser(uid: string): Promise<void> {
 export async function deleteUserProfile(uid: string): Promise<void> {
     const userRef = doc(db, 'users', uid);
     await deleteDoc(userRef);
+}
+
+export async function updatePushSubscription(userId: string, subscription: any): Promise<void> {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, { pushSubscription: subscription });
 }
 
 export async function updateFcmToken(userId: string, token: string | null): Promise<void> {

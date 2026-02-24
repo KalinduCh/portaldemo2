@@ -1,9 +1,11 @@
+
 // src/app/visiting-leo/page.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import type { Event } from '@/types';
-import { getEvents } from '@/services/eventService';
+import { getEvents, getEvent } from '@/services/eventService';
 import { VisitorAttendanceForm, type VisitorAttendanceFormValues } from '@/components/events/visitor-attendance-form';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from '@/components/ui/button';
@@ -18,7 +20,8 @@ import Image from 'next/image';
 import { getCurrentPosition, calculateDistanceInMeters, MAX_ATTENDANCE_DISTANCE_METERS } from '@/lib/geolocation';
 import { Badge } from '@/components/ui/badge';
 
-export default function VisitingLeoPage() {
+function VisitingLeoContent() {
+  const searchParams = useSearchParams();
   const [events, setEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
@@ -27,43 +30,45 @@ export default function VisitingLeoPage() {
   const { toast } = useToast();
   const logoUrl = "https://i.imgur.com/aRktweQ.png";
 
-  const fetchActiveEvents = useCallback(async () => {
+  const eventIdFromUrl = searchParams.get('eventId');
+
+  const fetchEventsData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const allEvents = await getEvents();
-      console.log(`[VisitingLeoPage] Received ${allEvents.length} total events from service.`);
-      
-      const activeEvents = allEvents.filter(event => {
-        if (!event.startDate || !isValid(parseISO(event.startDate))) {
-            console.warn(`[VisitingLeoPage/Filter] Skipping event due to invalid startDate: ${event.name} (ID: ${event.id})`);
-            return false;
+      if (eventIdFromUrl) {
+        const singleEvent = await getEvent(eventIdFromUrl);
+        if (singleEvent) {
+          setSelectedEvent(singleEvent);
+          setIsFormOpen(true);
+        } else {
+          toast({ title: "Event Not Found", description: "The event from the QR code could not be found.", variant: "destructive" });
         }
-        const startDate = parseISO(event.startDate);
-        
-        // If it has an end date, check if it's already past. If not, include it.
-        if (event.endDate && isValid(parseISO(event.endDate))) {
-            const endDate = parseISO(event.endDate);
-            return !isPast(endDate);
-        }
-        
-        // If it has no end date, assume it's "active" for 24 hours after its start time.
-        const oneDayAfterStart = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
-        return !isPast(oneDayAfterStart);
-
-      }).sort((a, b) => parseISO(a.startDate).getTime() - parseISO(b.startDate).getTime());
-      
-      console.log(`[VisitingLeoPage] Filtered down to ${activeEvents.length} active events.`);
-      setEvents(activeEvents);
+      } else {
+        const allEvents = await getEvents();
+        const activeEvents = allEvents.filter(event => {
+          if (!event.startDate || !isValid(parseISO(event.startDate))) {
+              return false;
+          }
+          const startDate = parseISO(event.startDate);
+          if (event.endDate && isValid(parseISO(event.endDate))) {
+              const endDate = parseISO(event.endDate);
+              return !isPast(endDate);
+          }
+          const oneDayAfterStart = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
+          return !isPast(oneDayAfterStart);
+        }).sort((a, b) => parseISO(a.startDate).getTime() - parseISO(b.startDate).getTime());
+        setEvents(activeEvents);
+      }
     } catch (error) {
-      console.error("Failed to fetch events for visiting Leos:", error);
-      toast({ title: "Error", description: "Could not load upcoming events.", variant: "destructive" });
+      console.error("Failed to fetch events:", error);
+      toast({ title: "Error", description: "Could not load events data.", variant: "destructive" });
     }
     setIsLoading(false);
-  }, [toast]);
+  }, [toast, eventIdFromUrl]);
 
   useEffect(() => {
-    fetchActiveEvents();
-  }, [fetchActiveEvents]);
+    fetchEventsData();
+  }, [fetchEventsData]);
 
   const handleOpenForm = (event: Event) => {
     setSelectedEvent(event);
@@ -246,7 +251,13 @@ export default function VisitingLeoPage() {
 
         {selectedEvent && (
           <Dialog open={isFormOpen} onOpenChange={(open) => {
-            if (!open) setSelectedEvent(null);
+            if (!open) {
+                setSelectedEvent(null);
+                // If the page was loaded via a URL parameter, redirect to the main page on close
+                if (eventIdFromUrl) {
+                    router.push('/visiting-leo');
+                }
+            }
             setIsFormOpen(open);
           }}>
             <DialogContent className="sm:max-w-lg">
@@ -261,6 +272,7 @@ export default function VisitingLeoPage() {
                 onCancel={() => {
                   setIsFormOpen(false);
                   setSelectedEvent(null);
+                  if (eventIdFromUrl) router.push('/visiting-leo');
                 }}
                 isLoading={isSubmitting}
                 eventDate={selectedEvent.startDate && isValid(parseISO(selectedEvent.startDate)) ? format(parseISO(selectedEvent.startDate), "MMMM d, yyyy, h:mm a") : "Date not available"}
@@ -274,4 +286,16 @@ export default function VisitingLeoPage() {
       </div>
     </div>
   );
+}
+
+export default function VisitingLeoPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-background py-8 px-4 flex justify-center items-center">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            </div>
+        }>
+            <VisitingLeoContent />
+        </Suspense>
+    );
 }

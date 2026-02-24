@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { Transaction, FinancialCategory, User } from '@/types';
+import type { Transaction, User } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -10,13 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { PlusCircle, Edit, Trash2, Loader2, TrendingUp, TrendingDown, DollarSign, BarChart, ExternalLink, Calendar, Filter, HandCoins, FileDown, FileText } from "lucide-react";
+import { PlusCircle, Edit, Trash2, Loader2, TrendingUp, TrendingDown, DollarSign, BarChart, Calendar, HandCoins, FileDown, FileText, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from '@/hooks/use-toast';
-// import { FinanceForm, type FinanceFormValues } from '@/components/finance/finance-form'; // Lazy loaded
 import { getTransactions, addTransaction, updateTransaction, deleteTransaction } from '@/services/financeService';
-import { format, parseISO, isValid, startOfMonth, endOfMonth, startOfYear, endOfYear, getYear, getMonth, eachMonthOfInterval } from 'date-fns';
+import { format, parseISO, getYear, getMonth, eachMonthOfInterval, startOfYear, endOfYear } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from '@/components/ui/label';
 import { Bar, BarChart as RechartsBarChart, CartesianGrid, XAxis, YAxis, ResponsiveContainer } from "recharts"
@@ -33,12 +31,10 @@ const FinanceForm = dynamic(() => import('@/components/finance/finance-form').th
     loading: () => <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
 });
 
-
 const chartConfig = {
-  income: { label: "Income", color: "hsl(var(--chart-2))" },
-  expenses: { label: "Expenses", color: "hsl(var(--chart-1))" },
+  income: { label: "Income", color: "#15803d" }, // Dark Green-700
+  expenses: { label: "Expenses", color: "#b91c1c" }, // Dark Red-700
 } satisfies ChartConfig;
-
 
 export default function FinancePage() {
   const { user, isLoading: authLoading } = useAuth();
@@ -51,15 +47,9 @@ export default function FinancePage() {
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   
+  const [selectedYear, setSelectedYear] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
-  
-  const paginatedTransactions = useMemo(() => {
-    const startIndex = (currentPage - 1) * rowsPerPage;
-    return transactions.slice(startIndex, startIndex + rowsPerPage);
-  }, [transactions, currentPage]);
-  
-  const totalPages = useMemo(() => Math.ceil(transactions.length / rowsPerPage), [transactions.length]);
 
   const isSuperOrAdmin = user?.role === 'super_admin' || user?.role === 'admin';
 
@@ -85,7 +75,77 @@ export default function FinancePage() {
       fetchTransactions();
     }
   }, [user, fetchTransactions, isSuperOrAdmin]);
+
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    transactions.forEach(t => years.add(getYear(parseISO(t.date)).toString()));
+    years.add(new Date().getFullYear().toString());
+    const sortedYears = Array.from(years).sort((a, b) => b.localeCompare(a));
+    return ['all', ...sortedYears];
+  }, [transactions]);
+
+  const filteredTransactions = useMemo(() => {
+    if (selectedYear === 'all') return transactions;
+    return transactions.filter(t => getYear(parseISO(t.date)).toString() === selectedYear);
+  }, [transactions, selectedYear]);
+
+  const paginatedTransactions = useMemo(() => {
+    const startIndex = (currentPage - 1) * rowsPerPage;
+    return filteredTransactions.slice(startIndex, startIndex + rowsPerPage);
+  }, [filteredTransactions, currentPage]);
   
+  const totalPages = useMemo(() => Math.ceil(filteredTransactions.length / rowsPerPage), [filteredTransactions.length]);
+
+  const financialSummary = useMemo(() => {
+    return filteredTransactions.reduce((acc, t) => {
+        if(t.type === 'income') acc.income += t.amount;
+        else acc.expenses += t.amount;
+        return acc;
+    }, { income: 0, expenses: 0 });
+  }, [filteredTransactions]);
+
+  const lifetimeBalance = useMemo(() => {
+    return transactions.reduce((acc, t) => {
+        return t.type === 'income' ? acc + t.amount : acc - t.amount;
+    }, 0);
+  }, [transactions]);
+
+  const chartData = useMemo(() => {
+    if (selectedYear === 'all') {
+        const yearGroups: Record<string, { income: number, expenses: number }> = {};
+        transactions.forEach(t => {
+            const y = getYear(parseISO(t.date)).toString();
+            if (!yearGroups[y]) yearGroups[y] = { income: 0, expenses: 0 };
+            if (t.type === 'income') yearGroups[y].income += t.amount;
+            else yearGroups[y].expenses += t.amount;
+        });
+        return Object.entries(yearGroups)
+            .map(([name, data]) => ({ name, ...data }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+    } else {
+        const yearInt = parseInt(selectedYear);
+        const startDate = startOfYear(new Date(yearInt, 0, 1));
+        const endDate = endOfYear(new Date(yearInt, 0, 1));
+        const months = eachMonthOfInterval({ start: startDate, end: endDate });
+        
+        const data = months.map(month => ({
+            name: format(month, 'MMM'),
+            income: 0,
+            expenses: 0
+        }));
+
+        transactions.forEach(t => {
+            const transactionDate = parseISO(t.date);
+            if(getYear(transactionDate) === yearInt) {
+                const monthIndex = getMonth(transactionDate);
+                if(t.type === 'income') data[monthIndex].income += t.amount;
+                else data[monthIndex].expenses += t.amount;
+            }
+        });
+        return data;
+    }
+  }, [transactions, selectedYear]);
+
   const handleOpenForm = (transaction?: Transaction) => {
     setSelectedTransaction(transaction || null);
     setIsFormOpen(true);
@@ -124,70 +184,9 @@ export default function FinancePage() {
     }
     setIsSubmitting(false);
   };
-  
-  const financialSummary = useMemo(() => {
-    const now = new Date();
-    const thisMonthStart = startOfMonth(now);
-    const thisYearStart = startOfYear(now);
-
-    return transactions.reduce((acc, t) => {
-        const transactionDate = parseISO(t.date);
-        const isThisMonth = transactionDate >= thisMonthStart;
-        const isThisYear = transactionDate >= thisYearStart;
-
-        if(t.type === 'income') {
-            acc.totalIncome += t.amount;
-            if(isThisMonth) acc.monthIncome += t.amount;
-            if(isThisYear) acc.yearIncome += t.amount;
-        } else { // expense
-            acc.totalExpenses += t.amount;
-            if(isThisMonth) acc.monthExpenses += t.amount;
-            if(isThisYear) acc.yearExpenses += t.amount;
-        }
-        return acc;
-    }, {
-        totalIncome: 0,
-        totalExpenses: 0,
-        monthIncome: 0,
-        monthExpenses: 0,
-        yearIncome: 0,
-        yearExpenses: 0,
-    });
-  }, [transactions]);
-  
-  const netBalance = financialSummary.totalIncome - financialSummary.totalExpenses;
-
-  const monthlyChartData = useMemo(() => {
-    const now = new Date();
-    const currentYear = getYear(now);
-    const months = eachMonthOfInterval({
-        start: startOfYear(now),
-        end: endOfYear(now)
-    });
-    
-    const data = months.map(month => ({
-        name: format(month, 'MMM'),
-        income: 0,
-        expenses: 0
-    }));
-
-    transactions.forEach(t => {
-        const transactionDate = parseISO(t.date);
-        if(getYear(transactionDate) === currentYear) {
-            const monthIndex = getMonth(transactionDate);
-            if(t.type === 'income') {
-                data[monthIndex].income += t.amount;
-            } else {
-                data[monthIndex].expenses += t.amount;
-            }
-        }
-    });
-
-    return data;
-  }, [transactions]);
 
   const handleExportCSV = () => {
-    const dataToExport = transactions.map(t => ({
+    const dataToExport = filteredTransactions.map(t => ({
         Date: format(parseISO(t.date), 'yyyy-MM-dd'),
         Type: t.type,
         Category: t.category,
@@ -200,7 +199,7 @@ export default function FinancePage() {
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `leo-club-transactions-${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `leo-club-finance-${selectedYear}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -212,7 +211,7 @@ export default function FinancePage() {
     const tableColumn = ["Date", "Type", "Category", "Source/Description", "Amount (LKR)"];
     const tableRows: any[][] = [];
 
-    transactions.forEach(t => {
+    filteredTransactions.forEach(t => {
         const transactionData = [
             format(parseISO(t.date), 'MMM dd, yyyy'),
             t.type,
@@ -223,15 +222,21 @@ export default function FinancePage() {
         tableRows.push(transactionData);
     });
 
-    doc.text("Leo Club Transactions", 14, 15);
+    doc.setFontSize(18);
+    doc.text(`Leo Club Financial Report - ${selectedYear === 'all' ? 'Lifetime' : selectedYear}`, 14, 15);
+    doc.setFontSize(11);
+    doc.text(`Generated on ${format(new Date(), 'PPP')}`, 14, 22);
+    
     autoTable(doc, {
         head: [tableColumn],
         body: tableRows,
-        startY: 20,
+        startY: 30,
+        theme: 'striped',
+        headStyles: { fillColor: [37, 99, 235] }
     });
-    doc.save(`leo-club-transactions-${new Date().toISOString().split('T')[0]}.pdf`);
+    
+    doc.save(`leo-club-finance-${selectedYear}.pdf`);
   };
-
 
   if (authLoading || isLoading || !user || !isSuperOrAdmin) {
     return <div className="flex items-center justify-center h-[calc(100vh-10rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
@@ -239,208 +244,238 @@ export default function FinancePage() {
   
   return (
     <div className="container mx-auto py-4 sm:py-8 space-y-6 sm:space-y-8">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <h1 className="text-2xl sm:text-3xl font-bold font-headline">Finance Dashboard</h1>
-        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => handleOpenForm()} className="w-full sm:w-auto">
-              <PlusCircle className="mr-2 h-4 w-4" /> Add Transaction
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{selectedTransaction ? "Edit" : "Add"} Transaction</DialogTitle>
-            </DialogHeader>
-            <FinanceForm
-              transaction={selectedTransaction}
-              onSubmit={handleFormSubmit}
-              onCancel={() => setIsFormOpen(false)}
-              isLoading={isSubmitting}
-            />
-          </DialogContent>
-        </Dialog>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+            <h1 className="text-2xl sm:text-3xl font-bold font-headline">Finance Dashboard</h1>
+            <p className="text-muted-foreground">Manage and track club income and expenses across years.</p>
+        </div>
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+                <Label htmlFor="year-select" className="sr-only">Select Period</Label>
+                <Select value={selectedYear} onValueChange={setSelectedYear}>
+                    <SelectTrigger id="year-select" className="w-[180px] bg-primary/5 border-primary/20 text-primary font-medium">
+                        <Calendar className="mr-2 h-4 w-4 opacity-70" />
+                        <SelectValue placeholder="Period" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {availableYears.map(y => (
+                            <SelectItem key={y} value={y}>
+                                {y === 'all' ? 'All Balances' : y}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+            <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+                <DialogTrigger asChild>
+                    <Button onClick={() => handleOpenForm()} className="w-full sm:w-auto shadow-sm">
+                    <PlusCircle className="mr-2 h-4 w-4" /> Add Entry
+                    </Button>
+                </DialogTrigger>
+                <DialogContent>
+                    <DialogHeader>
+                    <DialogTitle>{selectedTransaction ? "Edit" : "Add"} Transaction</DialogTitle>
+                    </DialogHeader>
+                    <FinanceForm
+                    transaction={selectedTransaction}
+                    onSubmit={handleFormSubmit}
+                    onCancel={() => setIsFormOpen(false)}
+                    isLoading={isSubmitting}
+                    />
+                </DialogContent>
+            </Dialog>
+        </div>
       </div>
       
-      {/* Summary Cards */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card className="border-l-4 border-l-green-500 shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Income</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground text-green-500" />
+                <CardTitle className="text-sm font-medium">Income ({selectedYear === 'all' ? 'All Time' : selectedYear})</CardTitle>
+                <TrendingUp className="h-4 w-4 text-green-500" />
             </CardHeader>
             <CardContent>
-                <div className="text-2xl font-bold text-green-600">LKR {financialSummary.yearIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                <p className="text-xs text-muted-foreground">+LKR {financialSummary.monthIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} this month</p>
+                <div className="text-2xl font-bold text-green-600">LKR {financialSummary.income.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Total Revenue</p>
             </CardContent>
         </Card>
-         <Card>
+         <Card className="border-l-4 border-l-red-500 shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
-                <TrendingDown className="h-4 w-4 text-muted-foreground text-red-500" />
+                <CardTitle className="text-sm font-medium">Expenses ({selectedYear === 'all' ? 'All Time' : selectedYear})</CardTitle>
+                <TrendingDown className="h-4 w-4 text-red-500" />
             </CardHeader>
             <CardContent>
-                <div className="text-2xl font-bold text-red-600">LKR {financialSummary.yearExpenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                <p className="text-xs text-muted-foreground">+LKR {financialSummary.monthExpenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} this month</p>
+                <div className="text-2xl font-bold text-red-600">LKR {financialSummary.expenses.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Total Costs</p>
             </CardContent>
         </Card>
-        <Card>
+        <Card className={cn("border-l-4 shadow-md bg-primary/5", lifetimeBalance >= 0 ? "border-l-primary" : "border-l-destructive")}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Net Balance</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                <DollarSign className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
-                <div className="text-2xl font-bold text-primary">
-                    LKR {netBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                <div className={cn("text-2xl font-bold", lifetimeBalance >= 0 ? "text-primary" : "text-destructive")}>
+                    LKR {lifetimeBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </div>
-                <p className="text-xs text-muted-foreground">Overall Profit / Loss</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider font-bold">Total of all years</p>
             </CardContent>
         </Card>
-         <Card>
+         <Card className="shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Transactions</CardTitle>
+                <CardTitle className="text-sm font-medium">Total Entries</CardTitle>
                 <HandCoins className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-                 <div className="text-2xl font-bold">{transactions.length}</div>
-                <p className="text-xs text-muted-foreground">Recorded entries</p>
+                 <div className="text-2xl font-bold">{filteredTransactions.length}</div>
+                <p className="text-xs text-muted-foreground">Transactions in selection</p>
             </CardContent>
         </Card>
       </div>
 
-      {/* Charts and Transaction List */}
       <div className="grid gap-6 md:grid-cols-5">
-        <Card className="md:col-span-3">
-             <CardHeader>
-                <CardTitle className="flex items-center"><BarChart className="mr-2 h-5 w-5 text-primary"/>Income vs. Expenses ({getYear(new Date())})</CardTitle>
+        <Card className="md:col-span-3 shadow-md">
+             <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="flex items-center text-base sm:text-lg text-primary"><BarChart className="mr-2 h-5 w-5"/>{selectedYear === 'all' ? 'Year-over-Year Overview' : `Monthly Breakdown - ${selectedYear}`}</CardTitle>
              </CardHeader>
-            <CardContent>
-                <ChartContainer config={chartConfig} className="h-[200px] sm:h-[250px] w-full">
+            <CardContent className="p-2 sm:p-6">
+                <ChartContainer config={chartConfig} className="h-[250px] md:h-[300px] w-full">
                     <ResponsiveContainer>
-                        <RechartsBarChart accessibilityLayer data={monthlyChartData}>
-                            <CartesianGrid vertical={false} />
+                        <RechartsBarChart accessibilityLayer data={chartData}>
+                            <CartesianGrid vertical={false} strokeDasharray="3 3" opacity={0.5} />
                             <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} fontSize={12} />
-                            <YAxis tickFormatter={(value) => `LKR ${Number(value) / 1000}k`} fontSize={12}/>
+                            <YAxis tickFormatter={(value) => `${Number(value) >= 1000 ? `${(Number(value) / 1000).toFixed(0)}k` : value}`} fontSize={12} width={40}/>
                             <ChartTooltip content={<ChartTooltipContent />} />
-                            <Bar dataKey="income" fill="var(--color-income)" radius={4} />
-                            <Bar dataKey="expenses" fill="var(--color-expenses)" radius={4} />
+                            <Bar dataKey="income" fill="var(--color-income)" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="expenses" fill="var(--color-expenses)" radius={[4, 4, 0, 0]} />
                         </RechartsBarChart>
                     </ResponsiveContainer>
                 </ChartContainer>
             </CardContent>
         </Card>
-         <Card className="md:col-span-2">
+         <Card className="md:col-span-2 shadow-md">
              <CardHeader>
-                <CardTitle>Recent Transactions</CardTitle>
-                <CardDescription>The last 5 income/expense entries.</CardDescription>
+                <CardTitle className="text-lg">Recent Transactions</CardTitle>
+                <CardDescription>Latest 5 absolute entries.</CardDescription>
              </CardHeader>
             <CardContent>
-                <div className="space-y-4">
-                    {transactions.slice(0, 5).map((t) => (
-                        <div key={t.id} className="flex items-center">
-                            <div className="p-2 bg-muted rounded-full mr-3">
-                                {t.type === 'income' ? <TrendingUp className="h-5 w-5 text-green-500"/> : <TrendingDown className="h-5 w-5 text-red-500" />}
+                <ScrollArea className="h-[300px]">
+                    <div className="space-y-4 pr-3">
+                        {transactions.slice(0, 5).map((t) => (
+                            <div key={t.id} className="flex items-center border-b pb-3 last:border-0 last:pb-0 hover:bg-muted/30 transition-colors rounded-sm px-1">
+                                <div className={cn("p-2 rounded-full mr-3", t.type === 'income' ? 'bg-green-50' : 'bg-red-50')}>
+                                    {t.type === 'income' ? <TrendingUp className="h-4 w-4 text-green-600"/> : <TrendingDown className="h-4 w-4 text-red-600" />}
+                                </div>
+                                <div className="flex-grow min-w-0">
+                                    <p className="font-bold text-sm text-primary leading-tight">{t.category}</p>
+                                    <p className="text-xs text-muted-foreground truncate">{t.source}</p>
+                                </div>
+                                <div className={cn("font-bold text-sm ml-2 shrink-0 text-right", t.type === 'income' ? 'text-green-600' : 'text-red-600')}>
+                                    {t.type === 'income' ? '+' : '-'}LKR {t.amount.toLocaleString()}
+                                </div>
                             </div>
-                            <div className="flex-grow">
-                                <p className="font-medium text-sm">{t.category}</p>
-                                <p className="text-xs text-muted-foreground">{t.source}</p>
-                            </div>
-                            <div className={`font-semibold text-sm ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                                {t.type === 'income' ? '+' : '-'}LKR {t.amount.toLocaleString()}
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                        {transactions.length === 0 && (
+                            <div className="text-center py-10 text-muted-foreground italic text-sm">No transactions found.</div>
+                        )}
+                    </div>
+                </ScrollArea>
             </CardContent>
         </Card>
       </div>
 
-       <Card>
-        <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+       <Card className="shadow-lg border-t-4 border-t-primary">
+        <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-                <CardTitle>All Transactions</CardTitle>
-                <CardDescription>A complete log of all financial activities.</CardDescription>
+                <CardTitle className="text-xl text-primary">Transaction Ledger - {selectedYear === 'all' ? 'All Balances' : selectedYear}</CardTitle>
+                <CardDescription>Full history of financial records for the selected period.</CardDescription>
             </div>
             <div className="flex items-center gap-2 w-full sm:w-auto">
-                <Button onClick={handleExportCSV} variant="outline" className="w-full sm:w-auto"><FileText className="mr-2 h-4 w-4" /> Export CSV</Button>
-                <Button onClick={handleDownloadPDF} variant="outline" className="w-full sm:w-auto"><FileDown className="mr-2 h-4 w-4" /> Download PDF</Button>
+                <Button onClick={handleExportCSV} variant="outline" size="sm" className="flex-1 sm:flex-none hover:bg-primary/5 hover:text-primary"><FileText className="mr-2 h-4 w-4" /> CSV</Button>
+                <Button onClick={handleDownloadPDF} variant="outline" size="sm" className="flex-1 sm:flex-none hover:bg-primary/5 hover:text-primary"><FileDown className="mr-2 h-4 w-4" /> PDF</Button>
             </div>
         </CardHeader>
         <CardContent>
-          {/* Desktop Table View */}
           <div className="hidden md:block">
               <Table>
-                <TableHeader className="sticky top-0 bg-background z-10">
+                <TableHeader className="bg-muted/50">
                   <TableRow>
                     <TableHead>Date</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Category</TableHead>
-                    <TableHead>Source/Description</TableHead>
+                    <TableHead>Description</TableHead>
                     <TableHead className="text-right">Amount (LKR)</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paginatedTransactions.map((t) => (
-                    <TableRow key={t.id}>
-                      <TableCell>{format(parseISO(t.date), 'MMM dd, yyyy')}</TableCell>
+                    <TableRow key={t.id} className="hover:bg-primary/5 transition-colors">
+                      <TableCell className="text-xs whitespace-nowrap">{format(parseISO(t.date), 'MMM dd, yyyy')}</TableCell>
                       <TableCell>
-                        <Badge variant={t.type === 'income' ? 'secondary' : 'destructive'} className={t.type === 'income' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                        <Badge variant={t.type === 'income' ? 'secondary' : 'destructive'} className={cn("capitalize px-2 py-0 h-5", t.type === 'income' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800')}>
                           {t.type}
                         </Badge>
                       </TableCell>
-                      <TableCell className="font-medium">{t.category}</TableCell>
-                      <TableCell className="text-muted-foreground">{t.source}</TableCell>
-                      <TableCell className={`text-right font-mono ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                        {t.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <TableCell className="font-medium text-xs">{t.category}</TableCell>
+                      <TableCell className="text-muted-foreground text-xs truncate max-w-[200px]">{t.source}</TableCell>
+                      <TableCell className={`text-right font-mono font-semibold ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                        {t.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell className="text-right">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenForm(t)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeleteTransaction(t.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex justify-end gap-1">
+                            <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-primary/10 hover:text-primary" onClick={() => handleOpenForm(t)}>
+                                <Edit className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => handleDeleteTransaction(t.id)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
           </div>
-          {/* Mobile Card View */}
           <div className="md:hidden space-y-3">
               {paginatedTransactions.map((t) => (
-                  <Card key={t.id} className={cn("shadow-sm", t.type === 'income' ? 'border-green-500/20' : 'border-red-500/20')}>
-                      <CardHeader className="flex flex-row items-center justify-between pb-2">
-                          <CardTitle className="text-base font-semibold">{t.category}</CardTitle>
-                          <div className={cn("font-bold text-lg", t.type === 'income' ? 'text-green-600' : 'text-red-600')}>
-                              {t.type === 'income' ? '+' : '-'}LKR {t.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                          </div>
+                  <Card key={t.id} className={cn("shadow-sm border-l-4 hover:shadow-md transition-shadow", t.type === 'income' ? 'border-l-green-500' : 'border-l-red-500')}>
+                      <CardHeader className="p-3 pb-1 flex flex-row items-center justify-between">
+                          <p className="text-[10px] text-muted-foreground font-medium">{format(parseISO(t.date), 'MMM dd, yyyy')}</p>
+                          <Badge variant="outline" className="text-[9px] uppercase h-4 px-1">{t.category}</Badge>
                       </CardHeader>
-                      <CardContent className="space-y-1 pb-3">
-                          <p className="text-sm text-muted-foreground">{t.source}</p>
-                          <p className="text-xs text-muted-foreground pt-1">{format(parseISO(t.date), 'MMMM dd, yyyy')}</p>
+                      <CardContent className="p-3 pt-0">
+                          <p className="text-xs font-semibold text-primary truncate mb-1">{t.source}</p>
+                          <p className={cn("text-base font-bold font-mono", t.type === 'income' ? 'text-green-600' : 'text-red-600')}>
+                              {t.type === 'income' ? '+' : '-'} LKR {t.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </p>
                       </CardContent>
-                      <CardFooter className="flex justify-end gap-2 pb-3 border-t pt-3">
-                          <Button variant="outline" size="sm" onClick={() => handleOpenForm(t)}>
-                              <Edit className="mr-1.5 h-3 w-3"/> Edit
+                      <CardFooter className="p-2 border-t flex justify-end gap-2 bg-muted/10">
+                          <Button variant="ghost" size="sm" className="h-8 text-xs hover:bg-primary/10" onClick={() => handleOpenForm(t)}>
+                              <Edit className="mr-1 h-3 w-3"/> Edit
                           </Button>
-                          <Button variant="destructive" size="sm" onClick={() => handleDeleteTransaction(t.id)}>
-                              <Trash2 className="mr-1.5 h-3 w-3"/> Delete
+                          <Button variant="ghost" size="sm" className="h-8 text-xs text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeleteTransaction(t.id)}>
+                              <Trash2 className="mr-1 h-3 w-3"/> Delete
                           </Button>
                       </CardFooter>
                   </Card>
               ))}
           </div>
-          {transactions.length === 0 && (
-            <p className="text-center text-muted-foreground py-8">No transactions recorded yet.</p>
+          {filteredTransactions.length === 0 && !isLoading && (
+            <div className="text-center py-16 text-muted-foreground">
+                <HandCoins className="h-12 w-12 mx-auto mb-3 opacity-20" />
+                <p>No financial records found for the selected period.</p>
+                <Button variant="link" className="mt-2" onClick={() => handleOpenForm()}>Record your first transaction</Button>
+            </div>
           )}
         </CardContent>
         {totalPages > 1 && (
             <CardFooter className="border-t pt-4">
-                <div className="flex items-center justify-end space-x-2 w-full">
-                    <span className="text-sm text-muted-foreground">Page {currentPage} of {totalPages}</span>
-                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1}>Previous</Button>
-                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}>Next</Button>
+                <div className="flex items-center justify-between w-full">
+                    <p className="text-xs text-muted-foreground">Showing {(currentPage - 1) * rowsPerPage + 1} to {Math.min(currentPage * rowsPerPage, filteredTransactions.length)} of {filteredTransactions.length} entries</p>
+                    <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" className="h-8 hover:bg-primary/5" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1}><ChevronLeft className="h-4 w-4" /></Button>
+                        <Button variant="outline" size="sm" className="h-8 hover:bg-primary/5" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}><ChevronRight className="h-4 w-4" /></Button>
+                    </div>
                 </div>
             </CardFooter>
         )}

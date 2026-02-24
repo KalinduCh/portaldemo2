@@ -38,6 +38,7 @@ const eventFormSchema = z.object({
   latitude: z.coerce.number().optional(),
   longitude: z.coerce.number().optional(),
   eventType: z.enum(['club_project', 'district_project', 'joint_project', 'official_visit', 'deadline', 'other']).optional(),
+  points: z.coerce.number().int().min(0, "Points must be a positive number.").optional(),
 }).refine(data => {
   // For non-deadline events, if endDate exists, it must be after startDate
   if (data.eventType !== 'deadline' && data.endDate) {
@@ -161,6 +162,7 @@ export function EventForm({ event, onSubmit, onCancel, isLoading }: EventFormPro
       latitude: event?.latitude ?? undefined,
       longitude: event?.longitude ?? undefined,
       eventType: event?.eventType || 'other',
+      points: event?.points || 0,
     },
   });
 
@@ -177,6 +179,7 @@ export function EventForm({ event, onSubmit, onCancel, isLoading }: EventFormPro
       latitude: event?.latitude ?? undefined,
       longitude: event?.longitude ?? undefined,
       eventType: event?.eventType || 'other',
+      points: event?.points || 0,
     });
   }, [event, form]);
 
@@ -190,6 +193,7 @@ export function EventForm({ event, onSubmit, onCancel, isLoading }: EventFormPro
         submissionValues.location = undefined;
         submissionValues.enableGeoRestriction = false;
         submissionValues.endDate = undefined; // Ensure end date is not sent for deadlines
+        submissionValues.points = 0; // Deadlines don't have participation points
     }
     await onSubmit(submissionValues);
   };
@@ -249,6 +253,23 @@ export function EventForm({ event, onSubmit, onCancel, isLoading }: EventFormPro
             />
             )}
         </div>
+
+        {watchedEventType !== 'deadline' && (
+          <FormField
+            control={form.control}
+            name="points"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="flex items-center"><Award className="mr-1.5 h-4 w-4 text-muted-foreground"/>Participation Points</FormLabel>
+                <FormControl>
+                  <Input type="number" min="0" placeholder="e.g., 500" {...field} onChange={e => field.onChange(parseInt(e.target.value) || 0)} />
+                </FormControl>
+                <FormDescription className="text-xs">Points awarded to members for attending this event.</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
         
         {watchedEventType !== 'deadline' && (
           <>

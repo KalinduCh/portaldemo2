@@ -1,11 +1,13 @@
+
 // src/app/(authenticated)/calendar/page.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import listPlugin from '@fullcalendar/list';
+import iCalendarPlugin from '@fullcalendar/icalendar';
 import interactionPlugin, { type DateClickArg } from '@fullcalendar/interaction';
 import { getEvents } from '@/services/eventService';
 import type { Event as MyEvent } from '@/types';
@@ -30,7 +32,7 @@ const eventTypeColors: Record<MyEvent['eventType'] & string, { backgroundColor: 
 };
 
 export default function CalendarPage() {
-  const [events, setEvents] = useState<any[]>([]);
+  const [clubEvents, setClubEvents] = useState<MyEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -49,19 +51,7 @@ export default function CalendarPage() {
     setIsLoading(true);
     try {
       const allEvents = await getEvents();
-      const calendarEvents = allEvents.map((event: MyEvent) => {
-        const color = event.eventType ? eventTypeColors[event.eventType] : eventTypeColors.other;
-        return {
-          title: event.name,
-          start: event.startDate ? parseISO(event.startDate) : new Date(),
-          end: event.endDate ? parseISO(event.endDate) : undefined,
-          extendedProps: { ...event },
-          backgroundColor: color.backgroundColor,
-          borderColor: color.borderColor,
-          textColor: '#FFFFFF'
-        };
-      });
-      setEvents(calendarEvents);
+      setClubEvents(allEvents);
       updateMonthlyEvents(new Date(), allEvents);
     } catch (error) {
       console.error("Failed to fetch calendar events:", error);
@@ -86,24 +76,58 @@ export default function CalendarPage() {
     fetchCalendarEvents();
   }, [fetchCalendarEvents]);
 
+  const allEventSources = useMemo(() => {
+    const calendarEvents = clubEvents.map((event: MyEvent) => {
+        const color = event.eventType ? eventTypeColors[event.eventType] : eventTypeColors.other;
+        return {
+          title: event.name,
+          start: event.startDate ? parseISO(event.startDate) : new Date(),
+          end: event.endDate ? parseISO(event.endDate) : undefined,
+          extendedProps: { ...event },
+          ...color
+        };
+      });
+
+      const holidaySource = {
+        url: 'https://ics.calendarlabs.com/517/c62b9b29/Sri_Lanka_Holidays.ics',
+        format: 'ics',
+        color: '#FFEBEE', // light pink background
+        borderColor: '#E57373',
+        textColor: '#C62828',
+      };
+      
+      return [calendarEvents, holidaySource];
+
+  }, [clubEvents]);
+
   const handleEventClick = (clickInfo: any) => {
-    setSelectedEvent(clickInfo.event.extendedProps as MyEvent);
+    if (clickInfo.event.extendedProps.id) { // This is one of our events
+      setSelectedEvent(clickInfo.event.extendedProps as MyEvent);
+    } else { // This is a holiday
+      setSelectedEvent({
+        id: clickInfo.event.title, // Use title as a pseudo-id
+        name: clickInfo.event.title,
+        startDate: clickInfo.event.startStr,
+        description: 'Public Holiday in Sri Lanka',
+        location: '',
+        reminderSent: false,
+        eventType: 'other' // Treat as 'other' for display purposes
+      });
+    }
     setSheetOpen(true);
   };
   
   const handleDateClick = (arg: DateClickArg) => {
       const clickedDate = arg.date;
-      const eventsOnDate = events.filter(e => {
+      const eventsOnDate = allEventSources[0].filter((e: any) => {
           const eventStart = new Date(e.start);
           const eventEnd = e.end ? new Date(e.end) : eventStart;
-          // Check if the clicked date falls within the event's start and end times
           return isWithinInterval(clickedDate, { start: eventStart, end: eventEnd });
-      }).map(e => e.extendedProps as MyEvent);
+      }).map((e: any) => e.extendedProps as MyEvent);
 
       if (eventsOnDate.length === 1) {
           setSelectedEvent(eventsOnDate[0]);
       } else {
-          // If multiple events or no events, let the sheet handle it
           setSelectedEvent(null);
       }
 
@@ -115,8 +139,17 @@ export default function CalendarPage() {
   const handleDatesSet = (dateInfo: any) => {
       const newDate = dateInfo.view.currentStart;
       setCurrentCalendarDate(newDate);
-      const allEvents: MyEvent[] = events.map(e => e.extendedProps);
-      updateMonthlyEvents(newDate, allEvents);
+      updateMonthlyEvents(newDate, clubEvents);
+  };
+
+  const handleEventDidMount = (info: any) => {
+    const { event, el } = info;
+    if (event.backgroundColor) {
+        el.style.backgroundColor = event.backgroundColor;
+    }
+    if (event.borderColor) {
+        el.style.borderColor = event.borderColor;
+    }
   };
 
   return (
@@ -133,6 +166,10 @@ export default function CalendarPage() {
               <span className="text-sm capitalize">{type.replace(/_/g, ' ')}</span>
             </div>
           ))}
+           <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[#FFEBEE]" />
+              <span className="text-sm capitalize">Public Holiday</span>
+            </div>
         </div>
 
       <Card className="shadow-lg">
@@ -144,17 +181,18 @@ export default function CalendarPage() {
           ) : (
             <div className="fc-theme">
               <FullCalendar
-                plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
+                plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin, iCalendarPlugin]}
                 initialView={isMobile ? 'dayGridMonth' : 'dayGridMonth'}
                 headerToolbar={{
                   left: 'prev,next today',
                   center: 'title',
                   right: 'dayGridMonth,timeGridWeek,listWeek',
                 }}
-                events={events}
+                eventSources={allEventSources}
                 eventClick={handleEventClick}
                 dateClick={handleDateClick}
                 datesSet={handleDatesSet}
+                eventDidMount={handleEventDidMount}
                 height="auto"
                 dayMaxEvents={2}
                 navLinks={true}
@@ -223,9 +261,9 @@ export default function CalendarPage() {
         <SheetContent className="w-full max-w-md sm:w-[400px]">
             <SheetHeader>
                 <SheetTitle>
-                    {selectedEvent 
+                    {selectedEvent && selectedEvent.extendedProps?.id 
                         ? 'Event Details' 
-                        : `Events for ${sheetDate ? format(sheetDate, 'MMMM d, yyyy') : ''}`
+                        : selectedEvent ? 'Holiday Information' : `Events for ${sheetDate ? format(sheetDate, 'MMMM d, yyyy') : ''}`
                     }
                 </SheetTitle>
                 <SheetDescription>
@@ -240,7 +278,7 @@ export default function CalendarPage() {
                     <EventDetails event={selectedEvent} />
                  ) : sheetEvents.length > 0 ? (
                     sheetEvents.map(event => <EventDetails key={event.id} event={event}/>)
-                 ) : <p className="text-muted-foreground text-sm">No events scheduled for this day.</p>}
+                 ) : <p className="text-muted-foreground text-sm">No club events scheduled for this day.</p>}
             </div>
         </SheetContent>
       </Sheet>
@@ -255,15 +293,12 @@ export default function CalendarPage() {
             --fc-button-active-border-color: hsl(var(--accent));
             --fc-today-bg-color: hsl(var(--accent) / 0.1);
         }
-        .fc-theme .fc-button-primary {
-          color: hsl(var(--primary-foreground));
-        }
         .fc-theme a.fc-event {
             cursor: pointer;
         }
-        .fc-theme .fc-h-event, .fc-theme .fc-v-event {
-            border: 1px solid var(--fc-event-border-color) !important;
-            background-color: var(--fc-event-bg-color) !important;
+        .fc .fc-daygrid-event-dot,
+        .fc .fc-list-event-dot {
+          border-color: var(--fc-event-border-color, transparent) !important;
         }
         .fc-toolbar.fc-header-toolbar {
             flex-direction: column;
@@ -283,6 +318,8 @@ export default function CalendarPage() {
 
 
 function EventDetails({ event }: { event: MyEvent }) {
+  const isHoliday = !event.id;
+
   const handleAddToCalendar = () => {
     const formatGoogleCalendarDate = (date: Date): string => {
         return formatISO(date).replace(/[-:]/g, '').split('.')[0] + 'Z';
@@ -305,13 +342,17 @@ function EventDetails({ event }: { event: MyEvent }) {
   let formattedDate = "Date unavailable";
   if (event?.startDate && isValid(parseISO(event.startDate))) {
       const startDate = parseISO(event.startDate);
-      formattedDate = format(startDate, "MMM d, yyyy 'at' h:mm a");
+      formattedDate = format(startDate, "MMM d, yyyy");
+      if(event.endDate) {
+          formattedDate += ` at ${format(startDate, "h:mm a")}`;
+      }
       if (event.endDate && isValid(parseISO(event.endDate))) {
           const endDate = parseISO(event.endDate);
           if (endDate.toDateString() !== startDate.toDateString()) {
               formattedDate = `${format(startDate, "MMM d, h:mm a")} - ${format(endDate, "MMM d, h:mm a")}`;
           } else {
-              formattedDate = `${format(startDate, "MMM d, yyyy, h:mm a")} - ${format(endDate, "h:mm a")}`;
+              if(!event.endDate) formattedDate = format(startDate, "MMM d, yyyy"); // All day event
+              else formattedDate = `${format(startDate, "MMM d, yyyy, h:mm a")} - ${format(endDate, "h:mm a")}`;
           }
       }
   }
@@ -320,8 +361,8 @@ function EventDetails({ event }: { event: MyEvent }) {
     <div className='border-b pb-4 mb-4 last:border-b-0 last:pb-0 last:mb-0'>
       <h3 className="text-xl font-headline text-primary font-semibold">{event.name}</h3>
       <div className="pt-2">
-        <Badge style={{ backgroundColor: eventTypeColors[event.eventType || 'other'].backgroundColor, color: '#fff', borderColor: eventTypeColors[event.eventType || 'other'].borderColor }} className={cn("text-white capitalize")}>
-            {event.eventType?.replace(/_/g, ' ') || 'Other'}
+        <Badge style={{ backgroundColor: isHoliday ? '#FFEBEE' : eventTypeColors[event.eventType || 'other'].backgroundColor, color: isHoliday ? '#C62828' : '#fff', borderColor: isHoliday ? '#E57373' : eventTypeColors[event.eventType || 'other'].borderColor }} className={cn("text-white capitalize")}>
+            {isHoliday ? 'Public Holiday' : event.eventType?.replace(/_/g, ' ') || 'Other'}
         </Badge>
       </div>
       <div className="space-y-3 mt-3">
@@ -329,7 +370,7 @@ function EventDetails({ event }: { event: MyEvent }) {
             <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
             <span className="text-muted-foreground">{formattedDate}</span>
         </div>
-        {event.location && event.eventType !== 'deadline' && (
+        {event.location && event.eventType !== 'deadline' && !isHoliday && (
             <div className="flex items-center text-sm">
                 <MapPin className="mr-2 h-4 w-4 text-muted-foreground" />
                 <span className="text-muted-foreground">{event.location}</span>
@@ -346,10 +387,12 @@ function EventDetails({ event }: { event: MyEvent }) {
             <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">{event.description}</p>
         </div>
       </div>
-      <Button onClick={handleAddToCalendar} variant="outline" className="w-full mt-4">
-          <CalendarPlus className="mr-2 h-4 w-4"/>
-          Add to Google Calendar
-      </Button>
+      {!isHoliday && (
+        <Button onClick={handleAddToCalendar} variant="outline" className="w-full mt-4">
+            <CalendarPlus className="mr-2 h-4 w-4"/>
+            Add to Google Calendar
+        </Button>
+      )}
     </div>
   );
 }

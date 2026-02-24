@@ -1,5 +1,4 @@
 
-
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import { google } from "googleapis";
@@ -152,6 +151,16 @@ export const onUserStatusChange = functions.firestore
     const before = change.before.data();
     const after = change.after.data();
     const userId = context.params.userId;
+
+    // Set custom claims if role changes
+    if (before.role !== after.role) {
+      try {
+        await admin.auth().setCustomUserClaims(userId, { role: after.role });
+        console.log(`Custom claim 'role: ${after.role}' set for user ${userId}`);
+      } catch (error) {
+        console.error(`Failed to set custom claim for user ${userId}:`, error);
+      }
+    }
 
     // Check if status changed from 'pending' to 'approved'
     if (before.status === "pending" && after.status === "approved") {
@@ -430,7 +439,12 @@ export const onAttendanceCreated = functions.firestore
       console.log(`Skipping points allocation for non-member or visitor attendance: ${snap.id}`);
       return;
     }
+    
+    // TEMPORARILY DISABLED: The points feature is being refactored.
+    console.log("Points allocation is temporarily disabled. Skipping.");
+    return;
 
+    /*
     const { eventId, userId } = attendanceRecord;
 
     // 1. Fetch Event Details
@@ -482,6 +496,129 @@ export const onAttendanceCreated = functions.firestore
     } catch (error) {
         console.error(`Failed to create points entry for user ${userId} and event ${eventId}:`, error);
     }
+    */
   });
-    
 
+// New function to send birthday wishes
+export const sendBirthdayWishes = functions.pubsub.schedule("0 9 * * *")
+  .timeZone("Asia/Colombo") // Runs at 9:00 AM every day
+  .onRun(async (context) => {
+    const today = new Date();
+    const todayMonth = today.getMonth() + 1; // getMonth() is 0-indexed
+    const todayDay = today.getDate();
+
+    // ID for today's task run to prevent duplicate runs
+    const taskDateId = `${today.getFullYear()}-${todayMonth}-${todayDay}`;
+    const taskRef = db.collection('dailyTasks').doc(`birthday-check-${taskDateId}`);
+    const taskSnap = await taskRef.get();
+
+    if (taskSnap.exists) {
+        console.log(`Birthday wishes for ${taskDateId} already sent. Exiting.`);
+        return;
+    }
+
+    const usersSnapshot = await db.collection("users").where("status", "==", "approved").get();
+    
+    if (usersSnapshot.empty) {
+        console.log("No approved users found. Skipping birthday check.");
+        await taskRef.set({ completedAt: admin.firestore.FieldValue.serverTimestamp() });
+        return;
+    }
+
+    const birthdayUsers: string[] = [];
+    usersSnapshot.forEach((doc) => {
+        const user = doc.data();
+        if (user.dateOfBirth) {
+            // Assuming dateOfBirth is stored as 'YYYY-MM-DD'
+            const dob = new Date(user.dateOfBirth);
+            const birthMonth = dob.getMonth() + 1;
+            const birthDay = dob.getDate();
+            
+            if (birthMonth === todayMonth && birthDay === todayDay) {
+                birthdayUsers.push(doc.id);
+            }
+        }
+    });
+
+    if (birthdayUsers.length > 0) {
+        console.log(`Found ${birthdayUsers.length} user(s) with birthdays today. Sending wishes...`);
+        for (const userId of birthdayUsers) {
+            const user = usersSnapshot.docs.find(d => d.id === userId)?.data();
+            if (user) {
+                await sendPushToUsers(
+                    [userId],
+                    `Happy Birthday, ${user.name}!`,
+                    "Wishing you a fantastic day from the Leo Club of Athugalpura!",
+                    "/profile"
+                );
+            }
+        }
+    } else {
+        console.log("No birthdays today.");
+    }
+    
+    // Mark the task as complete for today
+    await taskRef.set({ completedAt: admin.firestore.FieldValue.serverTimestamp(), birthdaysFound: birthdayUsers.length });
+});
+
+
+// New function to send event reminders
+export const sendEventReminders = functions.pubsub.schedule("0 8 * * *") // Runs at 8:00 AM every day
+    .timeZone("Asia/Colombo")
+    .onRun(async (context) => {
+        const now = new Date();
+        now.setHours(0, 0, 0, 0); // Start of today
+
+        const twoDaysFromNowStart = new Date(now);
+        twoDaysFromNowStart.setDate(now.getDate() + 2);
+        const twoDaysFromNowEnd = new Date(twoDaysFromNowStart);
+        twoDaysFromNowEnd.setHours(23, 59, 59, 999);
+
+        const todayEnd = new Date(now);
+        todayEnd.setHours(23, 59, 59, 999);
+
+        const usersSnapshot = await db.collection("users").where("status", "==", "approved").get();
+        if (usersSnapshot.empty) {
+            console.log("No approved users found. Skipping event reminders.");
+            return;
+        }
+        const allUserIds = usersSnapshot.docs.map(doc => doc.id);
+
+        // Reminder for events in 2 days
+        const twoDayReminderQuery = db.collection('events')
+            .where('startDate', '>=', admin.firestore.Timestamp.fromDate(twoDaysFromNowStart))
+            .where('startDate', '<=', admin.firestore.Timestamp.fromDate(twoDaysFromNowEnd))
+            .where('reminderSent', '==', false); // Assuming we add a field to track this
+
+        const twoDayEvents = await twoDayReminderQuery.get();
+        for (const doc of twoDayEvents.docs) {
+            const event = doc.data() as Event;
+            console.log(`Sending 2-day reminder for event: ${event.name}`);
+            await sendPushToUsers(
+                allUserIds,
+                `Reminder: ${event.name} in 2 Days!`,
+                `Just a heads-up that this event is coming up soon. We hope to see you there!`,
+                `/dashboard`
+            );
+        }
+
+        // Reminder for events happening today
+        const todayReminderQuery = db.collection('events')
+            .where('startDate', '>=', admin.firestore.Timestamp.fromDate(now))
+            .where('startDate', '<=', admin.firestore.Timestamp.fromDate(todayEnd));
+
+        const todayEvents = await todayReminderQuery.get();
+        for (const doc of todayEvents.docs) {
+            const event = doc.data() as Event;
+            console.log(`Sending same-day reminder for event: ${event.name}`);
+            await sendPushToUsers(
+                allUserIds,
+                `Reminder: ${event.name} is Today!`,
+                `This event is happening today. Don't miss out!`,
+                `/dashboard`
+            );
+        }
+
+        console.log(`Checked for event reminders. Found ${twoDayEvents.size} for 2-day reminders and ${todayEvents.size} for same-day reminders.`);
+    });
+    

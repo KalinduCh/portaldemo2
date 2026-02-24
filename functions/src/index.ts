@@ -1,17 +1,26 @@
-
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
-import { google } from "googleapis";
 import * as nodemailer from "nodemailer";
-import type { Event, PointsEntry } from "../../types";
+import * as webPush from "web-push";
+import { google } from "googleapis";
 
 admin.initializeApp();
 
 const db = admin.firestore();
-const messaging = admin.messaging();
 
-const GMAIL_EMAIL = "athugalpuraleoclub306d9@gmail.com";
-const GMAIL_APP_PASSWORD = "osng xjdz lhwu movh";
+// VAPID Configuration for Standard Web Push (iOS 16.4+ Compatible)
+const VAPID_PUBLIC_KEY = "BIc9bH71DzSMqmg3pBlve0gm14FLcVAh4EacFVw4Ovg4uEd3k11ETlLIimkEinqQgObmFoOLWdKb4ZKCN1Nn-oM";
+const VAPID_PRIVATE_KEY = "BBszIDGEDxUIu89QjvAH3Ocep5ifNG39cH8aII8yf8CZ_84N2l8hkVbcLuIzEMfz-aRP4REm_ly4hbOCpah2bbw";
+
+webPush.setVapidDetails(
+    "mailto:athugalpuraleoclub306d9@gmail.com",
+    VAPID_PUBLIC_KEY,
+    VAPID_PRIVATE_KEY
+);
+
+// Email Configuration
+const GMAIL_EMAIL = process.env.GMAIL_EMAIL || "athugalpuraleoclub306d9@gmail.com";
+const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD || "osng xjdz lhwu movh";
 
 const transporter = nodemailer.createTransport({
     service: "gmail",
@@ -36,23 +45,9 @@ const createEmailHtml = (bodyContent: string) => {
                       <p style="margin: 0; font-weight: bold; font-size: 15px; color: #1e3a8a;">LEO CLUB OF ATHUGALPURA</p>
                       <p style="margin: 5px 0 0 0; font-size: 12px; color: #555555;">Leo District 306 D9 | Sri Lanka</p>
                       <p style="margin: 5px 0 0 0; font-size: 11px; color: #777777;">Leostic Year 2025/26</p>
-                      <p style="margin-top: 15px;">
-                          <a href="https://www.facebook.com/leoclubofathugalpura/" target="_blank" style="text-decoration: none; margin-right: 12px;">
-                              <img src="https://i.postimg.cc/0QtH6Bn7/image.png" alt="Facebook" width="24" height="24">
-                          </a>
-                          <a href="https://www.instagram.com/athugalpuraleos/" target="_blank" style="text-decoration: none; margin-right: 12px;">
-                              <img src="https://i.postimg.cc/RZLrSGkP/image.png" alt="Instagram" width="24" height="24">
-                          </a>
-                          <a href="https://www.youtube.com/channel/UCe23x0ATwC2rIqA5RKWuF6w" target="_blank" style="text-decoration: none; margin-right: 12px;">
-                              <img src="https://i.postimg.cc/CMBWBw32/image.png" alt="YouTube" width="24" height="24">
-                          </a>
-                          <a href="https://www.tiktok.com/@athugalpuraleos" target="_blank" style="text-decoration: none;">
-                              <img src="https://i.postimg.cc/hjJ3d05k/image.png" alt="TikTok" width="24" height="24">
-                          </a>
-                      </p>
                     </td>
                     <td align="right" valign="top" style="width: 70px;">
-                      <img src="https://i.postimg.cc/4xDKG4TV/Navy-Blue-Minimal-Professional-Linked-In-Profile-Picture.png" alt="Leo Club Logo" width="60" style="width: 60px; height: auto; border-radius: 50%;" data-ai-hint="club logo">
+                      <img src="https://i.imgur.com/MP1YFNf.png" alt="Leo Club Logo" width="60" style="width: 60px; height: auto; border-radius: 50%;">
                     </td>
                   </tr>
                 </table>
@@ -63,11 +58,11 @@ const createEmailHtml = (bodyContent: string) => {
     `;
 };
 
-
-/**
- * Sends a transactional email.
- */
 const sendEmail = async (to: string, subject: string, htmlBody: string) => {
+    if (!GMAIL_EMAIL || !GMAIL_APP_PASSWORD) {
+        console.error("Missing Gmail environment variables.");
+        return;
+    }
     const fullHtml = createEmailHtml(htmlBody);
     const mailOptions = {
         from: `"LEO CLUB OF ATHUGALPURA" <${GMAIL_EMAIL}>`,
@@ -78,72 +73,66 @@ const sendEmail = async (to: string, subject: string, htmlBody: string) => {
 
     try {
         await transporter.sendMail(mailOptions);
-        console.log(`Email sent to ${to} with subject: ${subject}`);
+        console.log(`Email sent to ${to}`);
     } catch (error) {
         console.error(`Failed to send email to ${to}:`, error);
     }
 };
 
 /**
- * Sends push notifications to a list of user IDs.
+ * Sends standard Web Push notifications using the web-push library.
  */
-const sendPushToUsers = async (
+const sendWebPushToUsers = async (
   userIds: string[],
   title: string,
   body: string,
   link?: string,
 ) => {
-  if (!userIds || userIds.length === 0) {
-    console.log("No user IDs provided, skipping notification.");
-    return;
+  if (!userIds || userIds.length === 0) return;
+
+  const chunks = [];
+  for (let i = 0; i < userIds.length; i += 30) {
+    chunks.push(userIds.slice(i, i + 30));
   }
 
-  const tokens: string[] = [];
-  const usersSnapshot = await db.collection("users").where(
-    admin.firestore.FieldPath.documentId(),
-    "in",
-    userIds,
-  ).get();
-
-  usersSnapshot.forEach((doc) => {
-    const user = doc.data();
-    if (user.fcmToken) {
-      tokens.push(user.fcmToken);
-    }
-  });
-
-  if (tokens.length === 0) {
-    console.log("No valid FCM tokens found for the users.");
-    return;
-  }
-
-  const message: admin.messaging.MulticastMessage = {
-    tokens,
+  const payload = JSON.stringify({
     notification: {
       title,
       body,
-    },
-    webpush: {
-      fcmOptions: {
-        link: link || "https://leoathugal.web.app/dashboard",
-      },
-      notification: {
-        icon: "https://i.imgur.com/MP1YFNf.png",
-      },
-    },
-  };
-
-  try {
-    const response = await messaging.sendEachForMulticast(message);
-    console.log("Successfully sent message:", response);
-    if (response.failureCount > 0) {
-      console.warn("Failed to send to some tokens:", response.responses);
+      icon: "https://i.imgur.com/MP1YFNf.png",
+      data: {
+        url: link || "/dashboard"
+      }
     }
-  } catch (error) {
-    console.error("Error sending message:", error);
+  });
+
+  for (const chunk of chunks) {
+    const usersSnapshot = await db.collection("users")
+      .where(admin.firestore.FieldPath.documentId(), "in", chunk)
+      .get();
+
+    const pushPromises = [];
+
+    for (const userDoc of usersSnapshot.docs) {
+      const userData = userDoc.data();
+      if (userData.pushSubscription) {
+        const promise = webPush.sendNotification(userData.pushSubscription, payload)
+          .catch(err => {
+            if (err.statusCode === 410 || err.statusCode === 404) {
+              console.log(`Subscription for user ${userDoc.id} has expired. Removing...`);
+              return userDoc.ref.update({ pushSubscription: admin.firestore.FieldValue.delete() });
+            }
+            console.error(`Error sending push to user ${userDoc.id}:`, err);
+            return null;
+          });
+        pushPromises.push(promise);
+      }
+    }
+    await Promise.all(pushPromises);
   }
 };
 
+// --- Triggers ---
 
 export const onUserStatusChange = functions.firestore
   .document("users/{userId}")
@@ -152,71 +141,116 @@ export const onUserStatusChange = functions.firestore
     const after = change.after.data();
     const userId = context.params.userId;
 
-    // Check if status changed from 'pending' to 'approved'
     if (before.status === "pending" && after.status === "approved") {
       const userEmail = after.email;
       const userName = after.name || "Leo";
 
-      // Send Push Notification
-      await sendPushToUsers(
+      await sendWebPushToUsers(
         [userId],
         "Account Approved!",
-        `Welcome, ${userName}! Your account has been approved. You can now log in.`,
+        `Welcome, ${userName}! Your account has been approved.`,
         "/dashboard",
       );
 
-      // Send Email
       const subject = "Your LEO Portal Account has been Approved!";
-      const htmlBody = `
-        <p>Dear ${userName},</p>
-        <p>Congratulations! Your membership for the LEO Portal has been approved by an administrator.</p>
-        <p>You can now log in to your account to view upcoming events, track your participation, and connect with other members.</p>
-        <p>Welcome to the club!</p>
-        <p>Best Regards,<br>Leo Club Of Athugalpura</p>
-      `;
+      const htmlBody = `<p>Dear ${userName},</p><p>Congratulations! Your membership for the LEO Portal has been approved.</p><p>Welcome to the club!</p>`;
       if (userEmail) {
         await sendEmail(userEmail, subject, htmlBody);
       }
     }
-    
-    // Check if status changed from 'pending' to 'rejected'
+
     if (before.status === "pending" && after.status === "rejected") {
         const userEmail = after.email;
         const userName = after.name || "Leo";
-        
         const subject = "Update on Your LEO Portal Registration";
-        const htmlBody = `
-            <p>Dear ${userName},</p>
-            <p>Thank you for your interest in joining the LEO Portal.</p>
-            <p>After careful review, we regret to inform you that your registration could not be approved at this time. If you believe this is a mistake or wish to inquire further, please contact a club administrator.</p>
-            <p>We appreciate your understanding.</p>
-            <p>Best Regards,<br>Leo Club Of Athugalpura</p>
-        `;
-        if (userEmail) {
-            await sendEmail(userEmail, subject, htmlBody);
-        }
-
-        // After sending email, delete the user document
+        const htmlBody = `<p>Dear ${userName},</p><p>Thank you for your interest. Unfortunately, your registration could not be approved at this time.</p>`;
+        if (userEmail) await sendEmail(userEmail, subject, htmlBody);
         await db.collection("users").doc(userId).delete();
-        console.log(`Rejected user ${userId} document deleted after sending email.`);
     }
   });
 
-
 export const onEventCreated = functions.firestore
   .document("events/{eventId}")
-  .onCreate(async (snap, context) => {
+  .onCreate(async (snap) => {
     const event = snap.data();
     const usersSnapshot = await db.collection("users")
       .where("status", "==", "approved").get();
     const userIds = usersSnapshot.docs.map((doc) => doc.id);
-    await sendPushToUsers(
+    
+    await sendWebPushToUsers(
       userIds,
       "New Event Published!",
       `A new event has been scheduled: ${event.name}`,
       `/dashboard`,
     );
   });
+
+export const onTaskCreated = functions.firestore
+  .document("tasks/{taskId}")
+  .onCreate(async (snap, context) => {
+    const task = snap.data();
+    if (task.assigneeIds && task.assigneeIds.length > 0) {
+      await sendWebPushToUsers(
+        task.assigneeIds,
+        "New Task Assigned!",
+        `You have been assigned to: ${task.title}`,
+        `/tasks/${context.params.taskId}`
+      );
+    }
+  });
+
+export const onTaskUpdated = functions.firestore
+  .document("tasks/{taskId}")
+  .onUpdate(async (change, context) => {
+    const before = change.before.data();
+    const after = change.after.data();
+    
+    const newAssignees = after.assigneeIds.filter((id: string) => !before.assigneeIds.includes(id));
+    
+    if (newAssignees.length > 0) {
+      await sendWebPushToUsers(
+        newAssignees,
+        "New Task Assigned!",
+        `You have been assigned to: ${after.title}`,
+        `/tasks/${context.params.taskId}`
+      );
+    }
+  });
+
+// --- Scheduled Tasks ---
+
+export const sendBirthdayWishes = functions.pubsub.schedule("0 9 * * *")
+  .timeZone("Asia/Colombo")
+  .onRun(async () => {
+    const today = new Date();
+    const monthDay = `${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
+    
+    const usersSnapshot = await db.collection("users").where("status", "==", "approved").get();
+    
+    const birthdayUserIds = usersSnapshot.docs
+      .filter(doc => doc.data().dateOfBirth && doc.data().dateOfBirth.endsWith(monthDay))
+      .map(doc => doc.id);
+
+    if (birthdayUserIds.length > 0) {
+      await sendWebPushToUsers(
+        birthdayUserIds,
+        "Happy Birthday!",
+        "Wishing you a fantastic day from the Leo Club of Athugalpura! 🎉",
+        "/profile"
+      );
+    }
+  });
+
+export const sendMonthlyReports = functions.pubsub.schedule("0 9 1 * *")
+    .timeZone("Asia/Colombo")
+    .onRun(async () => {
+        const adminsSnapshot = await db.collection("users").where("role", "in", ["admin", "super_admin"]).get();
+        const adminEmails = adminsSnapshot.docs.map(doc => doc.data().email).filter(Boolean);
+
+        for (const email of adminEmails) {
+            await sendEmail(email, "Monthly Portal Report Ready", "<p>Your monthly summary report is now available in the portal dashboard.</p>");
+        }
+    });
 
 export const onUserDocumentChanged = functions.firestore
   .document("users/{userId}")
@@ -225,268 +259,27 @@ export const onUserDocumentChanged = functions.firestore
     const GOOGLE_SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
     const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
 
-    if (!GOOGLE_SHEET_ID || !GOOGLE_SERVICE_ACCOUNT_EMAIL || !GOOGLE_PRIVATE_KEY) {
-      console.log("Google Sheets environment variables not set. Skipping sync.");
-      return;
-    }
+    if (!GOOGLE_SHEET_ID || !GOOGLE_SERVICE_ACCOUNT_EMAIL || !GOOGLE_PRIVATE_KEY) return;
 
     const auth = new google.auth.GoogleAuth({
-      credentials: {
-        client_email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
-        private_key: GOOGLE_PRIVATE_KEY,
-      },
+      credentials: { client_email: GOOGLE_SERVICE_ACCOUNT_EMAIL, private_key: GOOGLE_PRIVATE_KEY },
       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     });
 
     const sheets = google.sheets({ version: "v4", auth });
     const userId = context.params.userId;
 
-    // If document is deleted
-    if (!change.after.exists) {
-      console.log(`User ${userId} deleted. Removing from Google Sheet.`);
-      const response = await sheets.spreadsheets.values.get({
-        spreadsheetId: GOOGLE_SHEET_ID,
-        range: "Sheet1!A:A",
-      });
-      const rows = response.data.values;
-      if (rows) {
-        const rowIndex = rows.findIndex((row) => row[0] === userId);
-        if (rowIndex !== -1) {
-          await sheets.spreadsheets.batchUpdate({
-            spreadsheetId: GOOGLE_SHEET_ID,
-            requestBody: {
-              requests: [{
-                deleteDimension: {
-                  range: {
-                    sheetId: 0,
-                    dimension: "ROWS",
-                    startIndex: rowIndex,
-                    endIndex: rowIndex + 1,
-                  },
-                },
-              }],
-            },
-          });
-          console.log(`Row for user ${userId} deleted from Google Sheet.`);
-        }
-      }
-      return;
-    }
+    if (!change.after.exists) return;
 
     const userData = change.after.data();
-    if (!userData) {
-      console.log("No user data found after change.");
-      return;
-    }
-
-    const values = [
-      userId,
-      userData.name || "",
-      userData.email || "",
-      userData.designation || "",
-      userData.nic || "",
-      userData.dateOfBirth || "",
-      userData.gender || "",
-      userData.mobileNumber || "",
-      userData.role || "member",
-      userData.status || "pending",
-      new Date().toISOString(),
-    ];
-
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: GOOGLE_SHEET_ID,
-      range: "Sheet1!A:A",
-    });
-
-    const rows = response.data.values;
-    let rowIndex = -1;
-    if (rows) {
-      rowIndex = rows.findIndex((row) => row[0] === userId);
-    }
-
-    if (rowIndex !== -1) {
-      // Update existing row
-      console.log(`Updating row for user ${userId} in Google Sheet.`);
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: GOOGLE_SHEET_ID,
-        range: `Sheet1!A${rowIndex + 1}`,
-        valueInputOption: "USER_ENTERED",
-        requestBody: { values: [values] },
-      });
-    } else {
-      // Append new row
-      console.log(`Appending new row for user ${userId} to Google Sheet.`);
-      await sheets.spreadsheets.values.append({
-        spreadsheetId: GOOGLE_SHEET_ID,
-        range: "Sheet1!A1",
-        valueInputOption: "USER_ENTERED",
-        requestBody: { values: [values] },
-      });
-    }
-  });
-    
-
-export const sendMonthlyReports = functions.pubsub.schedule("0 9 1 * *")
-    .timeZone("Asia/Colombo")
-    .onRun(async (context) => {
-        const now = new Date();
-        const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        const prevMonthName = prevMonth.toLocaleString("default", { month: "long" });
-        const year = prevMonth.getFullYear();
-
-        const startOfMonth = admin.firestore.Timestamp.fromDate(new Date(year, prevMonth.getMonth(), 1));
-        const endOfMonth = admin.firestore.Timestamp.fromDate(new Date(year, prevMonth.getMonth() + 1, 0, 23, 59, 59));
-
-        // 1. Get Admins
-        const adminsSnapshot = await db.collection("users").where("role", "in", ["admin", "super_admin"]).get();
-        const adminEmails = adminsSnapshot.docs.map((doc) => doc.data().email).filter(Boolean);
-
-        if (adminEmails.length === 0) {
-            console.log("No admins found to send reports to.");
-            return;
-        }
-
-        // 2. Get Finance Data
-        const transactionsSnapshot = await db.collection("transactions")
-            .where("date", ">=", startOfMonth)
-            .where("date", "<=", endOfMonth).get();
-        
-        let totalIncome = 0;
-        let totalExpenses = 0;
-        transactionsSnapshot.forEach((doc) => {
-            const t = doc.data();
-            if (t.type === "income") totalIncome += t.amount;
-            else totalExpenses += t.amount;
-        });
-
-        // 3. Get Attendance Data
-        const attendanceSnapshot = await db.collection("attendance")
-            .where("timestamp", ">=", startOfMonth)
-            .where("timestamp", "<=", endOfMonth).get();
-        const attendanceCount = attendanceSnapshot.size;
-
-        // 4. Construct and Send Email
-        const subject = `LEO Portal Monthly Report: ${prevMonthName} ${year}`;
-        const htmlBody = `
-            <h2>Monthly Summary: ${prevMonthName} ${year}</h2>
-            <p>Here is your automated monthly summary from the LEO Portal.</p>
-            
-            <h3>Financial Overview</h3>
-            <ul>
-                <li>Total Income: <strong>LKR ${totalIncome.toFixed(2)}</strong></li>
-                <li>Total Expenses: <strong>LKR ${totalExpenses.toFixed(2)}</strong></li>
-                <li>Net Balance: <strong>LKR ${(totalIncome - totalExpenses).toFixed(2)}</strong></li>
-            </ul>
-
-            <h3>Activity Overview</h3>
-            <ul>
-                <li>Total Attendance Records Logged: <strong>${attendanceCount}</strong></li>
-            </ul>
-            
-            <p>For a more detailed breakdown, please visit the Reports section in the LEO Portal.</p>
-            <p>Best Regards,<br>LEO Portal Automation</p>
-        `;
-
-        for (const email of adminEmails) {
-            await sendEmail(email, subject, htmlBody);
-        }
-        
-        console.log(`Monthly reports sent to ${adminEmails.length} admins.`);
-    });
-
-
-export const sendFeeReminders = functions.pubsub.schedule("0 9 * * 1") // Every Monday at 9 AM
-    .timeZone("Asia/Colombo")
-    .onRun(async (context) => {
-        const usersSnapshot = await db.collection("users")
-            .where("status", "==", "approved")
-            .where("membershipFeeStatus", "==", "pending").get();
-
-        if (usersSnapshot.empty) {
-            console.log("No users with pending fees. No reminders sent.");
-            return;
-        }
-
-        const userIds = usersSnapshot.docs.map((doc) => doc.id);
-
-        console.log(`Sending fee reminders to ${userIds.length} user(s).`);
-
-        await sendPushToUsers(
-            userIds,
-            "Membership Fee Reminder",
-            "This is a friendly reminder that your annual membership fee is pending. Please contact the treasurer to complete your payment.",
-            "/profile"
-        );
-    });
-
-export const onAttendanceCreated = functions.firestore
-  .document("attendance/{attendanceId}")
-  .onCreate(async (snap, context) => {
-    const attendanceRecord = snap.data();
-
-    // Ensure it's a member attendance and not a visitor
-    if (attendanceRecord.attendanceType !== "member" || !attendanceRecord.userId) {
-      console.log(`Skipping points allocation for non-member or visitor attendance: ${snap.id}`);
-      return;
-    }
-    
-    // TEMPORARILY DISABLED: The points feature is being refactored.
-    console.log("Points allocation is temporarily disabled. Skipping.");
-    return;
-
-    /*
-    const { eventId, userId } = attendanceRecord;
-
-    // 1. Fetch Event Details
-    const eventRef = db.collection("events").doc(eventId);
-    const eventSnap = await eventRef.get();
-
-    if (!eventSnap.exists) {
-      console.error(`Event ${eventId} not found for attendance record ${snap.id}.`);
-      return;
-    }
-    const eventData = eventSnap.data() as Event;
-    
-    // 2. Check if the event has points assigned
-    if (!eventData.points || eventData.points <= 0) {
-      console.log(`Event ${eventId} has no participation points assigned. Skipping.`);
-      return;
-    }
-
-    // 3. Fetch User Details
-    const userRef = db.collection("users").doc(userId);
-    const userSnap = await userRef.get();
-    if (!userSnap.exists) {
-        console.error(`User ${userId} not found for attendance record ${snap.id}.`);
-        return;
-    }
-    const userData = userSnap.data();
     if (!userData) return;
 
-    // 4. Create Points Entry
-    const pointsEntry: Omit<PointsEntry, "id" | "createdAt"> = {
-        userId: userId,
-        userName: userData.name || "Unknown User",
-        date: attendanceRecord.timestamp.toDate().toISOString(),
-        description: `Attended: ${eventData.name}`,
-        points: eventData.points,
-        category: "participation",
-        projectName: eventData.name, // Use event name as project name
-        addedBy: "system", // Mark as automated
-        eventId: eventId,
-    };
+    const values = [userId, userData.name || "", userData.email || "", userData.role || "member", new Date().toISOString()];
 
-    try {
-        await db.collection("pointsEntries").add({
-            ...pointsEntry,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            date: attendanceRecord.timestamp, // Use the attendance timestamp for the points date
-        });
-        console.log(`Successfully awarded ${eventData.points} points to user ${userId} for event ${eventId}.`);
-    } catch (error) {
-        console.error(`Failed to create points entry for user ${userId} and event ${eventId}:`, error);
-    }
-    */
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: GOOGLE_SHEET_ID,
+      range: "Sheet1!A1",
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values: [values] },
+    });
   });
-    
-
