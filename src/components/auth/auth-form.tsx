@@ -42,7 +42,7 @@ export function AuthForm({ mode, onSubmit, loading }: AuthFormProps) {
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: mode === "login" ? { email: "", password: "" } : { name: "", email: "", password: "" },
+    defaultValues: (mode === "login" ? { email: "", password: "" } : { name: "", email: "", password: "" }) as any,
   });
 
   const [showPassword, setShowPassword] = React.useState(false);
@@ -63,7 +63,7 @@ export function AuthForm({ mode, onSubmit, loading }: AuthFormProps) {
             {mode === "signup" && (
               <FormField
                 control={form.control}
-                name="name"
+                name={"name" as any}
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Full Name</FormLabel>

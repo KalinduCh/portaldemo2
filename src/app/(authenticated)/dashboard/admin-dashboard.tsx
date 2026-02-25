@@ -123,7 +123,8 @@ export function AdminDashboard({ user }: AdminDashboardProps) {
         if (!stats[record.userId]) {
           stats[record.userId] = { count: 0, user: allUsers.find(u => u.id === record.userId) };
         }
-        if (stats[record.userId].user && ['member', 'admin'].includes(stats[record.userId].user?.role) && stats[record.userId].user?.status === 'approved') { 
+        const statUser = stats[record.userId].user;
+        if (statUser && ['member', 'admin'].includes(statUser.role as string) && statUser.status === 'approved') {
             stats[record.userId].count += 1;
         }
       }
