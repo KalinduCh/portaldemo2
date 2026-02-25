@@ -526,7 +526,7 @@ export default function MemberManagementPage() {
                                 <p className="font-semibold text-primary truncate text-sm sm:text-base">{memberItem.name}</p>
                                 <p className="text-[10px] sm:text-xs text-muted-foreground truncate flex items-center"><Mail className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-1"/> {memberItem.email}</p>
                                 <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
-                                    <Badge variant="outline" className="text-[10px] sm:text-xs capitalize h-5 px-1.5"><Mail className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" /> {memberItem.designation || 'Not Set'}</Badge>
+                                    <Badge variant="outline" className="text-[10px] sm:text-xs capitalize h-5 px-1.5"><Briefcase className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" /> {memberItem.designation || 'Not Set'}</Badge>
                                     <Badge variant={memberItem.role === 'admin' || memberItem.role === 'super_admin' ? 'default' : 'secondary'} className={`text-[10px] sm:text-xs h-5 px-1.5 ${memberItem.role === 'admin' || memberItem.role === 'super_admin' ? 'bg-primary/80' : ''}`}>{memberItem.role.replace('_', ' ')}</Badge>
                                     <Badge variant="outline" className={cn("capitalize text-[10px] sm:text-xs h-5 px-1.5", getFeeStatusVariant(memberItem.membershipFeeStatus))}>{memberItem.membershipFeeStatus || 'pending'}</Badge>
                                 </div>

@@ -74,7 +74,6 @@
   },
   "devDependencies": {
     "@next/bundle-analyzer": "^14.2.4",
-    "@types/cors": "^2.8.17",
     "@types/node": "18.19.74",
     "@types/papaparse": "^5.3.14",
     "@types/react": "^18",
