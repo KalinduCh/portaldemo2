@@ -1,6 +1,5 @@
 
 {
-<<<<<<< HEAD
   "name": "LeoPortal",
   "short_name": "LeoPortal",
   "description": "Leo Club Management System",
@@ -21,25 +20,3 @@
     }
   ]
 }
-=======
-    "name": "LEO Portal - Athugalpura",
-    "short_name": "LEO Portal",
-    "description": "Leo Club Member Portal for Leo Club of Athugalpura",
-    "start_url": "/",
-    "display": "standalone",
-    "background_color": "#F9FAFB",
-    "theme_color": "#2563EB",
-    "icons": [
-        {
-            "src": "https://i.imgur.com/MP1YFNf.png",
-            "sizes": "192x192",
-            "type": "image/png"
-        },
-        {
-            "src": "https://i.imgur.com/MP1YFNf.png",
-            "sizes": "512x512",
-            "type": "image/png"
-        }
-    ]
-}
->>>>>>> 3a308af48d89ca619759fa3f62a504ba7d34bc5e
