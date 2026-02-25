@@ -8,11 +8,6 @@ export const metadata: Metadata = {
   title: 'LEO Portal | Athugalpura',
   description: 'Leo Club Member Portal for Leo Club of Athugalpura',
   manifest: '/manifest.json',
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'default',
-    title: 'LeoPortal',
-  },
   icons: {
     icon: 'https://i.imgur.com/MP1YFNf.png',
     apple: 'https://i.imgur.com/MP1YFNf.png',

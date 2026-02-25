@@ -23,7 +23,7 @@ import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/comp
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PieChart, Pie, Cell, Legend, ResponsiveContainer } from "recharts"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Label } from '@/components/label';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 
 const PIE_CHART_COLORS = ["#2563eb", "#14b8a6", "#ef4444", "#f97316", "#8b5cf6", "#3b82f6", "#06b6d4", "#ec4899", "#84cc16"];
@@ -226,7 +226,7 @@ export default function ReportsPage() {
         fileName = `leo-portal_attendance_log.csv`;
       }
 
-      const csv = Papa.unparse(data);
+      const csv = Papa.unparse(data as any);
       downloadCsv(csv, fileName);
       toast({ title: "Success", description: "CSV file has been downloaded." });
     } catch (error) {

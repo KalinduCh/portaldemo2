@@ -54,7 +54,7 @@ const TaskColumn: React.FC<TaskColumnProps> = ({ status, tasks, users, events, o
 
     return (
         <Card
-            ref={drop}
+            ref={drop as any}
             className={cn("min-h-[200px] transition-colors", isOver ? 'bg-muted/50' : 'bg-card')}
         >
             <CardHeader>
@@ -86,7 +86,7 @@ const DraggableTaskCard: React.FC<DraggableTaskCardProps> = ({ task, users, even
     }));
 
     return (
-        <div ref={drag} style={{ opacity: isDragging ? 0.5 : 1 }}>
+        <div ref={drag as any} style={{ opacity: isDragging ? 0.5 : 1 }}>
             <TaskCard task={task} users={users} events={events} />
         </div>
     );
@@ -177,7 +177,12 @@ export default function TasksPage() {
     const handleCreateTask = async (data: TaskFormValues) => {
         if (!user) return;
         try {
-            await createTask({ ...data, createdBy: user.id });
+            await createTask({
+                ...data,
+                createdBy: user.id,
+                description: data.description || "",
+                dueDate: data.dueDate?.toISOString()
+            });
             toast({ title: "Task Created", description: "New task has been added." });
             setIsFormOpen(false);
             fetchData();

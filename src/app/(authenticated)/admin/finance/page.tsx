@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { Transaction, User } from '@/types';
+import type { Transaction } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -32,8 +32,8 @@ const FinanceForm = dynamic(() => import('@/components/finance/finance-form').th
 });
 
 const chartConfig = {
-  income: { label: "Income", color: "#15803d" }, // Dark Green-700
-  expenses: { label: "Expenses", color: "#b91c1c" }, // Dark Red-700
+  income: { label: "Income", color: "#15803d" },
+  expenses: { label: "Expenses", color: "#b91c1c" },
 } satisfies ChartConfig;
 
 export default function FinancePage() {
@@ -168,7 +168,11 @@ export default function FinancePage() {
   const handleFormSubmit = async (data: FinanceFormValues) => {
     setIsSubmitting(true);
     try {
-      const transactionData = { ...data, amount: parseFloat(data.amount) };
+      const transactionData = {
+        ...data,
+        amount: parseFloat(data.amount),
+        date: data.date.toISOString()
+      };
       if (selectedTransaction) {
         await updateTransaction(selectedTransaction.id, transactionData);
         toast({ title: "Transaction Updated" });

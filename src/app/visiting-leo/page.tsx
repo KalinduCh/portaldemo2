@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import type { Event } from '@/types';
 import { getEvents, getEvent } from '@/services/eventService';
 import { VisitorAttendanceForm, type VisitorAttendanceFormValues } from '@/components/events/visitor-attendance-form';
@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, CalendarDays, MapPin, CheckCircle, AlertTriangle, Clock, Navigation } from 'lucide-react';
-import { format, parseISO, isPast, isFuture, isValid, isWithinInterval } from 'date-fns';
+import { format, parseISO, isPast, isValid, isWithinInterval } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { markVisitorAttendance } from '@/services/attendanceService';
 import Link from 'next/link';
@@ -28,6 +28,7 @@ function VisitingLeoContent() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const router = useRouter();
   const logoUrl = "https://i.imgur.com/aRktweQ.png";
 
   const eventIdFromUrl = searchParams.get('eventId');
@@ -253,7 +254,6 @@ function VisitingLeoContent() {
           <Dialog open={isFormOpen} onOpenChange={(open) => {
             if (!open) {
                 setSelectedEvent(null);
-                // If the page was loaded via a URL parameter, redirect to the main page on close
                 if (eventIdFromUrl) {
                     router.push('/visiting-leo');
                 }

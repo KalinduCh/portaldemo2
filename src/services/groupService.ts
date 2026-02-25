@@ -1,82 +1,53 @@
+
 // src/services/groupService.ts
-import {
-  collection,
-  addDoc,
-  getDocs,
-  doc,
-  getDoc,
-  updateDoc,
-  deleteDoc,
-  query,
-  orderBy,
-  arrayUnion,
-  arrayRemove,
-  serverTimestamp
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase/clientApp';
+import { mockDb } from '@/lib/mockDb';
 import type { CommunicationGroup } from '@/types';
-
-const groupsCollectionRef = collection(db, 'communicationGroups');
-
-const docToGroup = (docSnap: any): CommunicationGroup => {
-    const data = docSnap.data();
-    return {
-        id: docSnap.id,
-        name: data.name,
-        memberIds: data.memberIds || [],
-        createdAt: data.createdAt?.toDate().toISOString() || new Date().toISOString(),
-        color: data.color,
-    };
-};
 
 export async function createGroup(name: string, memberIds: string[], color?: string): Promise<string> {
   const groupData: any = {
     name,
     memberIds,
-    createdAt: serverTimestamp(),
+    createdAt: new Date().toISOString(),
   };
   if (color) {
     groupData.color = color;
   }
-  const docRef = await addDoc(groupsCollectionRef, groupData);
-  return docRef.id;
+  const newGroup = mockDb.create('groups', groupData);
+  return newGroup.id;
 }
 
 export async function getGroups(): Promise<CommunicationGroup[]> {
-  const q = query(groupsCollectionRef, orderBy('name', 'asc'));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(docToGroup);
+  const groups = mockDb.getAll('groups') as CommunicationGroup[];
+  return [...groups].sort((a: CommunicationGroup, b: CommunicationGroup) => (a.name || "").localeCompare(b.name || ""));
 }
 
 export async function getGroup(groupId: string): Promise<CommunicationGroup | null> {
-    const docRef = doc(db, 'communicationGroups', groupId);
-    const docSnap = await getDoc(docRef);
-    if(docSnap.exists()){
-        return docToGroup(docSnap);
-    }
-    return null;
+    return mockDb.getOne('groups', groupId) || null;
 }
 
 export async function updateGroup(groupId: string, updates: Partial<{ name: string; memberIds: string[]; color: string }>): Promise<void> {
-  const docRef = doc(db, 'communicationGroups', groupId);
-  await updateDoc(docRef, updates);
+  mockDb.update('groups', groupId, updates);
 }
 
 export async function deleteGroup(groupId: string): Promise<void> {
-  const docRef = doc(db, 'communicationGroups', groupId);
-  await deleteDoc(docRef);
+  mockDb.delete('groups', groupId);
 }
 
 export async function addMemberToGroup(groupId: string, userId: string): Promise<void> {
-    const docRef = doc(db, 'communicationGroups', groupId);
-    await updateDoc(docRef, {
-        memberIds: arrayUnion(userId)
-    });
+    const group = await getGroup(groupId);
+    if (group) {
+        const memberIds = [...group.memberIds];
+        if (!memberIds.includes(userId)) {
+            memberIds.push(userId);
+            await updateGroup(groupId, { memberIds });
+        }
+    }
 }
 
 export async function removeMemberFromGroup(groupId: string, userId: string): Promise<void> {
-    const docRef = doc(db, 'communicationGroups', groupId);
-    await updateDoc(docRef, {
-        memberIds: arrayRemove(userId)
-    });
+    const group = await getGroup(groupId);
+    if (group) {
+        const memberIds = group.memberIds.filter(id => id !== userId);
+        await updateGroup(groupId, { memberIds });
+    }
 }
