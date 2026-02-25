@@ -22,7 +22,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
-import { FirebaseErrorListener } from "@/components/FirebaseErrorListener";
 
 
 export default function AuthenticatedLayout({
@@ -172,8 +171,6 @@ export default function AuthenticatedLayout({
             </AlertDialogContent>
         </AlertDialog>
       )}
-
-      <FirebaseErrorListener />
     </>
   );
 }

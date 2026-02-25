@@ -119,7 +119,7 @@ export default function CalendarPage() {
   
   const handleDateClick = (arg: DateClickArg) => {
       const clickedDate = arg.date;
-      const eventsOnDate = allEventSources[0].filter((e: any) => {
+      const eventsOnDate = (allEventSources[0] as any[]).filter((e: any) => {
           const eventStart = new Date(e.start);
           const eventEnd = e.end ? new Date(e.end) : eventStart;
           return isWithinInterval(clickedDate, { start: eventStart, end: eventEnd });
@@ -261,7 +261,7 @@ export default function CalendarPage() {
         <SheetContent className="w-full max-w-md sm:w-[400px]">
             <SheetHeader>
                 <SheetTitle>
-                    {selectedEvent && selectedEvent.extendedProps?.id 
+                    {selectedEvent && (selectedEvent as any).extendedProps?.id
                         ? 'Event Details' 
                         : selectedEvent ? 'Holiday Information' : `Events for ${sheetDate ? format(sheetDate, 'MMMM d, yyyy') : ''}`
                     }

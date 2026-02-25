@@ -183,13 +183,13 @@ export function ProfileCard({ user, onUpdateProfile, isUpdatingProfile: isParent
   const selectedDateForPicker = form.watch("dateOfBirth");
   let dateForPicker: Date | undefined = undefined;
   if (selectedDateForPicker) {
-    if (selectedDateForPicker instanceof Date) {
-      dateForPicker = selectedDateForPicker;
-    } else if (typeof selectedDateForPicker === 'string') {
+    if (typeof selectedDateForPicker === 'string') {
       const parsed = parseISO(selectedDateForPicker);
       if (isValid(parsed)) {
         dateForPicker = parsed;
       }
+    } else if ((selectedDateForPicker as any) instanceof Date) {
+        dateForPicker = selectedDateForPicker as any;
     }
   }
 

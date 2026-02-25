@@ -5,14 +5,9 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from '@/hooks/use-auth';
 
 export const metadata: Metadata = {
-  title: 'LEO Portal | Athugalpura',
-  description: 'Leo Club Member Portal for Leo Club of Athugalpura',
+  title: 'LEO Portal | Demo Club',
+  description: 'Leo Club Member Portal for Demo Leo Club',
   manifest: '/manifest.json',
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'default',
-    title: 'LeoPortal',
-  },
   icons: {
     icon: 'https://i.imgur.com/MP1YFNf.png',
     apple: 'https://i.imgur.com/MP1YFNf.png',

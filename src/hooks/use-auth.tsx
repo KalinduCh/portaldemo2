@@ -1,18 +1,11 @@
+
 // src/hooks/use-auth.tsx
 "use client";
 
 import { useState, useEffect, useCallback, useRef, createContext, useContext, ReactNode } from 'react';
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  sendPasswordResetEmail as firebaseSendPasswordResetEmail,
-  signOut as firebaseSignOut,
-  type User as FirebaseUser
-} from 'firebase/auth';
-import { auth } from '@/lib/firebase/clientApp';
-import { createUserProfile, getUserProfile, updateFcmToken } from '@/services/userService';
-import type { User, UserRole } from '@/types';
+import { mockDb } from '@/lib/mockDb';
+import { getAllUsers, createUserProfile, getUserProfile } from '@/services/userService';
+import type { User } from '@/types';
 import { useToast } from './use-toast';
 import { useRouter } from 'next/navigation';
 
@@ -33,7 +26,7 @@ export interface PasswordResetResult {
 
 interface AuthState {
   user: User | null;
-  firebaseUser: FirebaseUser | null;
+  firebaseUser: any | null;
   isLoading: boolean;
   isAuthOperationInProgress: boolean;
   adminViewMode: AdminViewMode;
@@ -63,10 +56,8 @@ export const useAuth = (): AuthState => {
 
 function useProvideAuth(): AuthState {
   const [user, setUser] = useState<User | null>(null);
-  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthOperationInProgress, setIsAuthOperationInProgress] = useState(false);
-  const [isSigningUp, setIsSigningUp] = useState(false);
   const [adminViewMode, setAdminViewMode] = useState<AdminViewMode>('admin_view');
   const { toast } = useToast();
   const inactivityTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -77,6 +68,21 @@ function useProvideAuth(): AuthState {
     if (storedViewMode) {
       setAdminViewMode(storedViewMode);
     }
+
+    const storedUserId = localStorage.getItem('demo_user_id');
+    if (storedUserId) {
+        getUserProfile(storedUserId).then(profile => {
+            if (profile) {
+                if (profile.email === SUPER_ADMIN_EMAIL && profile.role !== 'super_admin') {
+                    profile.role = 'super_admin';
+                }
+                setUser(profile);
+            }
+            setIsLoading(false);
+        });
+    } else {
+        setIsLoading(false);
+    }
   }, []);
 
   const handleSetAdminViewMode = (mode: AdminViewMode) => {
@@ -86,7 +92,7 @@ function useProvideAuth(): AuthState {
   };
 
   const logoutDueToInactivity = useCallback(() => {
-    firebaseSignOut(auth).then(() => {
+    logout().then(() => {
         toast({
             title: "Session Expired",
             description: "You have been logged out due to inactivity.",
@@ -104,47 +110,13 @@ function useProvideAuth(): AuthState {
     
     if (user) {
         const timeoutDuration = user.role === 'admin' || user.role === 'super_admin'
-            ? 30 * 60 * 1000 // 30 minutes for admins
-            : 20 * 60 * 1000; // 20 minutes for members
+            ? 30 * 60 * 1000
+            : 20 * 60 * 1000;
 
         inactivityTimeoutRef.current = setTimeout(logoutDueToInactivity, timeoutDuration);
     }
   }, [user, logoutDueToInactivity]);
   
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      if (isSigningUp) return;
-
-      setIsLoading(true);
-      if (fbUser) {
-        setFirebaseUser(fbUser);
-        let userProfile = await getUserProfile(fbUser.uid);
-        if (userProfile) {
-          if (userProfile.email === SUPER_ADMIN_EMAIL && userProfile.role !== 'super_admin') {
-            userProfile.role = 'super_admin';
-          }
-
-          if (userProfile.status === 'pending' || userProfile.status === 'rejected') {
-             setUser(null);
-             if (auth.currentUser) await firebaseSignOut(auth);
-          } else {
-            setUser(userProfile);
-          }
-        } else {
-           setUser(null);
-           if (auth.currentUser) await firebaseSignOut(auth);
-        }
-      } else {
-        setFirebaseUser(null);
-        setUser(null);
-      }
-      setIsLoading(false);
-      setIsAuthOperationInProgress(false);
-    });
-
-    return () => unsubscribe();
-  }, [isSigningUp]);
-
   useEffect(() => {
     if (user && !isLoading) {
         const events: (keyof WindowEventMap)[] = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
@@ -162,58 +134,52 @@ function useProvideAuth(): AuthState {
 
   const login = useCallback(async (email: string, pass: string): Promise<LoginResult> => {
     setIsAuthOperationInProgress(true);
-    try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, pass);
-      const fbUser = userCredential.user;
-      let userProfile = await getUserProfile(fbUser.uid);
+    await new Promise(resolve => setTimeout(resolve, 500));
 
-      if (!userProfile) {
-        await firebaseSignOut(auth);
-        return { user: null, success: false, reason: 'not_found' };
-      }
-      
-      if (userProfile.email === SUPER_ADMIN_EMAIL && userProfile.role !== 'super_admin') {
-        userProfile.role = 'super_admin';
-      }
+    const users = await getAllUsers();
+    const foundUser = users.find(u => u.email === email);
 
-      if (userProfile.status === 'pending' || userProfile.status === 'rejected') {
-        await firebaseSignOut(auth);
-        return { user: null, success: false, reason: 'pending' };
-      }
-      
-      setUser(userProfile);
-      return { user: userProfile, success: true };
-
-    } catch (error: any) {
-      console.error("Firebase login error:", error.message);
-      return { user: null, success: false, reason: 'invalid_credentials' };
-    } finally {
+    if (!foundUser) {
         setIsAuthOperationInProgress(false);
+        return { user: null, success: false, reason: 'not_found' };
     }
+
+    // Check password against mock data
+    if (foundUser.password && foundUser.password !== pass) {
+        setIsAuthOperationInProgress(false);
+        return { user: null, success: false, reason: 'invalid_credentials' };
+    }
+
+    if (!pass) {
+        setIsAuthOperationInProgress(false);
+        return { user: null, success: false, reason: 'invalid_credentials' };
+    }
+
+    if (foundUser.email === SUPER_ADMIN_EMAIL && foundUser.role !== 'super_admin') {
+      foundUser.role = 'super_admin';
+    }
+
+    if (foundUser.status === 'pending' || foundUser.status === 'rejected') {
+      setIsAuthOperationInProgress(false);
+      return { user: null, success: false, reason: 'pending' };
+    }
+
+    localStorage.setItem('demo_user_id', foundUser.id);
+    setUser(foundUser);
+    setIsAuthOperationInProgress(false);
+    return { user: foundUser, success: true };
   }, []);
 
   const signup = useCallback(async (name: string, email: string, pass: string): Promise<User | null> => {
-    setIsSigningUp(true);
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-      const fbUser = userCredential.user;
-      
-      await createUserProfile(fbUser.uid, email, name, 'member', 'pending');
-      const newUserProfile = await getUserProfile(fbUser.uid);
+    setIsAuthOperationInProgress(true);
+    await new Promise(resolve => setTimeout(resolve, 500));
 
-      await firebaseSignOut(auth);
-      
-      return newUserProfile;
+    const uid = 'user-' + Math.random().toString(36).substr(2, 9);
+    await createUserProfile(uid, email, name, 'member', 'pending');
+    const newUserProfile = await getUserProfile(uid);
 
-    } catch (error: any) {
-      console.error("Firebase signup error:", error.message);
-      if (auth.currentUser) {
-          await firebaseSignOut(auth);
-      }
-      return null;
-    } finally {
-        setIsSigningUp(false);
-    }
+    setIsAuthOperationInProgress(false);
+    return newUserProfile;
   }, []);
 
   const logout = useCallback(async () => {
@@ -221,34 +187,16 @@ function useProvideAuth(): AuthState {
         clearTimeout(inactivityTimeoutRef.current);
     }
     
-    if (user?.id) {
-        try {
-            await updateFcmToken(user.id, null);
-            console.log("FCM token cleared on logout.");
-        } catch (error) {
-            console.error("Failed to clear FCM token on logout:", error);
-        }
-    }
-
-    setIsAuthOperationInProgress(true);
-    await firebaseSignOut(auth).catch(error => {
-        console.error("Firebase logout error:", error.message);
-    }).finally(() => {
-        setIsAuthOperationInProgress(false);
-    });
-  }, [user]);
+    localStorage.removeItem('demo_user_id');
+    setUser(null);
+    setIsAuthOperationInProgress(false);
+  }, []);
 
    const sendPasswordResetEmail = useCallback(async (email: string): Promise<PasswordResetResult> => {
     setIsAuthOperationInProgress(true);
-    try {
-        await firebaseSendPasswordResetEmail(auth, email);
-        return { success: true };
-    } catch (error: any) {
-        console.error("Password reset error:", error);
-        return { success: false, message: "Failed to send reset email. Please try again later.", error };
-    } finally {
-        setIsAuthOperationInProgress(false);
-    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+    setIsAuthOperationInProgress(false);
+    return { success: true };
    }, []);
 
   const performAdminAuthOperation = useCallback(async (asyncTask: () => Promise<void>): Promise<void> => {
@@ -267,7 +215,7 @@ function useProvideAuth(): AuthState {
 
   return { 
       user, 
-      firebaseUser, 
+      firebaseUser: null,
       isLoading, 
       isAuthOperationInProgress, 
       login, 

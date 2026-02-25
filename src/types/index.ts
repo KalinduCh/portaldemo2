@@ -32,6 +32,7 @@ export interface User {
   membershipFeeStatus?: 'paid' | 'pending' | 'partial';
   membershipFeeAmountPaid?: number;
   permissions?: Partial<Record<AdminPermission, boolean>>;
+  password?: string;
 }
 
 export type EventType = 'club_project' | 'district_project' | 'joint_project' | 'official_visit' | 'deadline' | 'other';

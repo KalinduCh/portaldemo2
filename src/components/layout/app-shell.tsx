@@ -38,8 +38,8 @@ export function AppShell({ children }: AppShellProps) {
   const { user } = useAuth();
   const logoUrl = "https://i.imgur.com/aRktweQ.png";
 
-  const president = { name: 'Leo Lion Menuka Wickramasinghe', email: 'isanthamenuka@gmail.com', phone: '+9477 352 3893' };
-  const support = { name: 'Leo Kalindu Chamikara', email: 'chamikarakc@gmail.com', phone: '+9477 2137638' };
+  const president = { name: 'Demo President', email: 'president@democlub.org', phone: '+1234567890' };
+  const support = { name: 'Demo IT Support', email: 'support@democlub.org', phone: '+1234567890' };
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -126,7 +126,7 @@ export function AppShell({ children }: AppShellProps) {
         <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-md sm:px-6">
           <div className="flex items-center gap-2">
             <SidebarTrigger className="md:hidden" />
-            <h1 className="text-lg font-semibold font-headline hidden md:block">Welcome to Leo Club of Athugalpura...</h1>
+            <h1 className="text-lg font-semibold font-headline hidden md:block">Welcome to Demo Leo Club...</h1>
           </div>
           <UserDropdown />
         </header>

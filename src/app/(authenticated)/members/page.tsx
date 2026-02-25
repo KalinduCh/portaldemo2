@@ -30,11 +30,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { collection, getDocs, query, where, deleteDoc, doc } from 'firebase/firestore';
-import { db, auth as firebaseAuth } from '@/lib/firebase/clientApp'; 
-import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { createUserProfile, updateUserProfile, approveUser as approveUserService, rejectUser as rejectUserService, deleteUserProfile } from '@/services/userService';
-import { Users as UsersIcon, Search, Edit, Trash2, Loader2, UploadCloud, FileText, PlusCircle, Mail, Briefcase, UserCheck, UserX, CreditCard, HandCoins } from "lucide-react";
+import { getAllUsers, createUserProfile, updateUserProfile, approveUser as approveUserService, rejectUser as rejectUserService, deleteUserProfile } from '@/services/userService';
+import { Users as UsersIcon, Search, Edit, Trash2, Loader2, UploadCloud, FileText, PlusCircle, Mail, Briefcase, UserCheck, UserX, CreditCard } from "lucide-react";
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import type { MemberEditFormValues } from '@/components/members/member-edit-form';
@@ -54,7 +51,7 @@ const MemberAddForm = dynamic(() => import('@/components/members/member-add-form
 type FeeStatus = 'paid' | 'pending' | 'partial';
 
 export default function MemberManagementPage() {
-  const { user, isLoading: authLoading, performAdminAuthOperation, setAuthOperationInProgress } = useAuth();
+  const { user, isLoading: authLoading, performAdminAuthOperation } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -92,35 +89,9 @@ export default function MemberManagementPage() {
   const fetchMembers = useCallback(async () => {
     setIsLoading(true);
     try {
-      const usersRef = collection(db, "users");
-      const q = query(usersRef); 
-      const querySnapshot = await getDocs(q);
-      const fetchedMembers: User[] = [];
-      querySnapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        if(data.status !== 'rejected') { // Exclude rejected users from the list
-            let role = data.role;
-            if (data.email === 'check22@gmail.com') {
-                role = 'super_admin';
-            }
-            fetchedMembers.push({
-                id: docSnap.id, 
-                name: data.name,
-                email: data.email,
-                photoUrl: data.photoUrl,
-                role: role,
-                status: data.status || 'approved',
-                designation: data.designation,
-                nic: data.nic,
-                dateOfBirth: data.dateOfBirth,
-                gender: data.gender,
-                mobileNumber: data.mobileNumber,
-                membershipFeeStatus: data.membershipFeeStatus || 'pending',
-                membershipFeeAmountPaid: data.membershipFeeAmountPaid || 0,
-            } as User);
-        }
-      });
-      setMembers(fetchedMembers.sort((a, b) => (a.name || "").localeCompare(b.name || "")));
+      const allUsers = await getAllUsers();
+      const fetchedMembers = allUsers.filter(m => m.status !== 'rejected');
+      setMembers(fetchedMembers);
     } catch (error) {
         console.error("Error fetching members: ", error);
         toast({ title: "Error", description: "Could not load members.", variant: "destructive"});
@@ -180,29 +151,17 @@ export default function MemberManagementPage() {
 
   const handleAddFormSubmit = async (data: MemberAddFormValues) => {
     setIsSubmitting(true);
-    const originalAuthUserUID = firebaseAuth.currentUser?.uid;
     try {
-      await performAdminAuthOperation(async () => {
-        const userCredential = await createUserWithEmailAndPassword(firebaseAuth, data.email, data.password);
-        const newAuthUser = userCredential.user;
-        await createUserProfile(newAuthUser.uid, data.email, data.name, data.role, 'approved', undefined, undefined, undefined, undefined, undefined, data.designation);
-        if (firebaseAuth.currentUser && firebaseAuth.currentUser.uid === newAuthUser.uid) {
-          await signOut(firebaseAuth);
-        }
-      });
+      const uid = 'user-' + Math.random().toString(36).substr(2, 9);
+      await createUserProfile(uid, data.email, data.name, data.role, 'approved', undefined, undefined, undefined, undefined, undefined, data.designation);
       toast({ title: "User Created", description: `${data.name} has been successfully added as an approved user.` });
       fetchMembers(); 
       setIsAddFormOpen(false); 
     } catch (error: any) {
       console.error("Failed to add user:", error);
-      let errorMessage = "Could not create user account.";
-      if (error.code === 'auth/email-already-in-use') errorMessage = "This email address is already in use.";
-      else if (error.code === 'auth/weak-password') errorMessage = "The password is too weak. It must be at least 6 characters.";
-      else errorMessage = error.message || errorMessage;
-      toast({ title: "Error Adding User", description: errorMessage, variant: "destructive" });
+      toast({ title: "Error Adding User", description: error.message || "Could not create user account.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
-      if (originalAuthUserUID && (!firebaseAuth.currentUser || firebaseAuth.currentUser.uid !== originalAuthUserUID)) {}
     }
   };
   
@@ -220,12 +179,12 @@ export default function MemberManagementPage() {
 
   const handleReject = async (memberId: string, memberEmail?: string) => {
     if (!memberId) return;
-    if (confirm(`Are you sure you want to reject the application for ${memberEmail || 'this user'}? This will send a rejection email and remove their application.`)) {
+    if (confirm(`Are you sure you want to reject the application for ${memberEmail || 'this user'}? This will remove their application.`)) {
         setIsSubmitting(true);
         try {
             await rejectUserService(memberId);
-            toast({ title: "User Rejected", description: "The user's application has been rejected and will be removed."});
-            fetchMembers(); // Re-fetches list, rejected user will be gone.
+            toast({ title: "User Rejected", description: "The user's application has been rejected and removed."});
+            fetchMembers();
         } catch (error: any) {
             toast({ title: "Rejection Failed", description: `Could not reject user: ${error.message}`, variant: "destructive" });
         }
@@ -250,7 +209,7 @@ export default function MemberManagementPage() {
         toast({title: "User Profile Removed", description: "The user's profile has been removed."});
         fetchMembers();
     } catch (error: any) {
-        toast({title: "Error Deleting Profile", description: `Could not remove user profile. Error: ${error.message || 'Unknown Firestore error.'}`, variant: "destructive", duration: 7000});
+        toast({title: "Error Deleting Profile", description: `Could not remove user profile. Error: ${error.message || 'Unknown error.'}`, variant: "destructive", duration: 7000});
     }
     setIsSubmitting(false);
     setIsSingleDeleteAlertOpen(false);
@@ -343,89 +302,56 @@ export default function MemberManagementPage() {
       return;
     }
     setIsImporting(true);
-    setAuthOperationInProgress(true); 
-    const originalAuthUserUID = firebaseAuth.currentUser?.uid;
 
     const reader = new FileReader();
     reader.onload = async (e) => {
       const csvText = e.target?.result as string;
       if (!csvText) {
         toast({ title: "Error Reading File", description: "Could not read the CSV file.", variant: "destructive" });
-        setIsImporting(false); setAuthOperationInProgress(false);
+        setIsImporting(false);
         return;
       }
       const { header, data } = parseCSV(csvText);
       const requiredHeaders = ["Type", "Name", "Email", "NIC", "DateOfBirth", "Gender", "MobileNumber", "Designation"];
       if (!requiredHeaders.every(h => header.includes(h))) {
-        toast({ title: "Invalid CSV Format", description: `CSV must contain headers: ${requiredHeaders.join(", ")}. Found: ${header.join(", ")}`, variant: "destructive", duration: 10000 });
-        setIsImporting(false); setAuthOperationInProgress(false);
+        toast({ title: "Invalid CSV Format", description: `CSV must contain headers: ${requiredHeaders.join(", ")}.`, variant: "destructive", duration: 10000 });
+        setIsImporting(false);
         return;
       }
 
-      let successCount = 0, skippedCount = 0, errorCount = 0;
-      const importMessages: string[] = []; 
+      let successCount = 0, skippedCount = 0;
 
       for (const row of data) {
-        const { Email: email, NIC: password, Name: name, Type: type, NIC: nic, DateOfBirth: dateOfBirth, Gender: gender, MobileNumber: mobileNumber, Designation: designation } = row;
+        const { Email: email, Name: name, Type: type, NIC: nic, DateOfBirth: dateOfBirth, Gender: gender, MobileNumber: mobileNumber, Designation: designation } = row;
         const role = type?.toLowerCase() === 'admin' ? 'admin' : 'member';
-        if (!email || !password || !name || !type || !nic || !designation) {
-          skippedCount++; importMessages.push(`Skipped (Missing Data): Row for ${email || 'Unknown Email'}.`);
-          continue;
-        }
-        if (password.length < 6) {
-          skippedCount++; importMessages.push(`Skipped (Weak Password for ${email}): NIC (password) must be at least 6 characters.`);
+        if (!email || !name || !type || !nic || !designation) {
+          skippedCount++;
           continue;
         }
         
         try {
-          const userCredential = await createUserWithEmailAndPassword(firebaseAuth, email, password);
-          const newAuthUser = userCredential.user;
-          await createUserProfile(newAuthUser.uid, email, name, role, 'approved', undefined, nic, dateOfBirth, gender, mobileNumber, designation);
-          if (firebaseAuth.currentUser && firebaseAuth.currentUser.uid === newAuthUser.uid) {
-            await signOut(firebaseAuth); importMessages.push(`Successfully imported and signed out ${email}.`);
-          } else {
-            importMessages.push(`Successfully imported ${email}.`);
-          }
+          const uid = 'user-' + Math.random().toString(36).substr(2, 9);
+          await createUserProfile(uid, email, name, role, 'approved', undefined, nic, dateOfBirth, gender, mobileNumber, designation);
           successCount++;
-        } catch (error: any) {
-          if (error.code === 'auth/email-already-in-use') {
-            skippedCount++; importMessages.push(`Skipped (Email Exists): ${email}`);
-          } else if (error.code === 'auth/weak-password') {
-            skippedCount++; importMessages.push(`Skipped (Weak Password for ${email}): NIC (password) must be at least 6 characters.`);
-          } else {
-            errorCount++; importMessages.push(`Error importing ${email}: ${error.message || String(error)}`);
-            if (firebaseAuth.currentUser && firebaseAuth.currentUser.email === email) {
-              try { await signOut(firebaseAuth); importMessages.push(`Defensive sign-out attempted for ${email}.`); } 
-              catch (signOutError) { importMessages.push(`Error during defensive sign-out for ${email}.`); }
-            }
-          }
+        } catch (error) {
+            skippedCount++;
         }
       } 
       
       fetchMembers(); 
-      await new Promise(resolve => setTimeout(resolve, 1000)); 
 
-      let toastTitle = "Import Process Complete";
-      let toastDescription = `${successCount} users imported.`;
-      if (skippedCount > 0) toastDescription += ` ${skippedCount} skipped.`;
-      if (errorCount > 0) toastDescription += ` ${errorCount} failed. Check console for details.`;
-      
-      const showSessionNotice = originalAuthUserUID && (!firebaseAuth.currentUser || firebaseAuth.currentUser.uid !== originalAuthUserUID);
-      if (showSessionNotice) {
-        toast({ title: "Session Notice (Import Related)", description: "Your admin session may have been affected. Please log out and log back in if issues arise.", variant: "destructive", duration: 15000 });
-        setTimeout(() => { toast({ title: toastTitle, description: toastDescription, variant: errorCount > 0 ? "destructive" : "default", duration: 10000 }); }, 500); 
-      } else {
-        toast({ title: toastTitle, description: toastDescription, variant: errorCount > 0 ? "destructive" : "default", duration: 10000 });
-      }
+      toast({
+          title: "Import Process Complete",
+          description: `${successCount} users imported. ${skippedCount > 0 ? `${skippedCount} skipped.` : ''}`
+      });
 
       setCsvFile(null);
       if(fileInputRef.current) fileInputRef.current.value = ""; 
       setIsImporting(false);
-      setAuthOperationInProgress(false);
     };
     reader.onerror = () => {
         toast({ title: "Error Reading File", description: "An error occurred while trying to read the file.", variant: "destructive" });
-        setIsImporting(false); setAuthOperationInProgress(false); 
+        setIsImporting(false);
     }
     reader.readAsText(csvFile);
   };
@@ -528,7 +454,7 @@ export default function MemberManagementPage() {
         <CardHeader><CardTitle className="flex items-center text-lg sm:text-xl"><UploadCloud className="mr-2 h-5 w-5 text-primary" /> Import Users from CSV</CardTitle><CardDescription className="text-xs sm:text-sm">Upload a CSV file to batch import user accounts. Imported users are automatically approved.</CardDescription></CardHeader>
         <CardContent className="space-y-4">
             <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4"><Input type="file" accept=".csv" onChange={handleFileChange} ref={fileInputRef} className="flex-grow file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:bg-muted file:text-muted-foreground hover:file:bg-primary/10" disabled={isImporting || isSubmitting} /><Button onClick={handleImportMembers} disabled={!csvFile || isImporting || isSubmitting} className="w-full sm:w-auto">{isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}{isImporting ? "Importing..." : "Import Users"}</Button></div>
-            <Alert><FileText className="h-4 w-4" /><AlertTitle>CSV Format Instructions</AlertTitle><AlertDescription className="text-xs leading-relaxed">CSV Headers: <strong>Type, Name, Email, NIC, DateOfBirth, Gender, MobileNumber, Designation</strong>.<ul className="list-disc list-inside mt-1 space-y-0.5"><li><strong>Type</strong>: "admin" or "member".</li><li><strong>Designation</strong>: e.g., "Club President", "Member".</li><li><strong>NIC</strong>: Used as initial password (min 6 chars).</li></ul>Emails already in use will be skipped.</AlertDescription></Alert>
+            <Alert><FileText className="h-4 w-4" /><AlertTitle>CSV Format Instructions</AlertTitle><AlertDescription className="text-xs leading-relaxed">CSV Headers: <strong>Type, Name, Email, NIC, DateOfBirth, Gender, MobileNumber, Designation</strong>.<ul className="list-disc list-inside mt-1 space-y-0.5"><li><strong>Type</strong>: "admin" or "member".</li><li><strong>Designation</strong>: e.g., "Club President", "Member".</li><li><strong>NIC</strong>: Used as identification.</li></ul>Emails already in use will be skipped.</AlertDescription></Alert>
         </CardContent>
       </Card>
 
@@ -600,7 +526,7 @@ export default function MemberManagementPage() {
                                 <p className="font-semibold text-primary truncate text-sm sm:text-base">{memberItem.name}</p>
                                 <p className="text-[10px] sm:text-xs text-muted-foreground truncate flex items-center"><Mail className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-1"/> {memberItem.email}</p>
                                 <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
-                                    <Badge variant="outline" className="text-[10px] sm:text-xs capitalize h-5 px-1.5"><Briefcase className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" /> {memberItem.designation || 'Not Set'}</Badge>
+                                    <Badge variant="outline" className="text-[10px] sm:text-xs capitalize h-5 px-1.5"><Mail className="mr-1 h-2.5 w-2.5 sm:h-3 sm:w-3" /> {memberItem.designation || 'Not Set'}</Badge>
                                     <Badge variant={memberItem.role === 'admin' || memberItem.role === 'super_admin' ? 'default' : 'secondary'} className={`text-[10px] sm:text-xs h-5 px-1.5 ${memberItem.role === 'admin' || memberItem.role === 'super_admin' ? 'bg-primary/80' : ''}`}>{memberItem.role.replace('_', ' ')}</Badge>
                                     <Badge variant="outline" className={cn("capitalize text-[10px] sm:text-xs h-5 px-1.5", getFeeStatusVariant(memberItem.membershipFeeStatus))}>{memberItem.membershipFeeStatus || 'pending'}</Badge>
                                 </div>

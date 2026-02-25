@@ -62,9 +62,9 @@ type GroupFormState = { id?: string; name: string; memberIds: string[]; color?: 
 
 const SIGNATURE_TEMPLATES = {
     'none': { label: "No Signature", value: "\n\nBest Regards," },
-    'president': { label: "President's Signature", value: "\n\nBest Regards,\nLeo Menuka Wickramasinghe\nClub President\nLeo Club of Athugalpura" },
-    'secretary': { label: "Secretary's Signature", value: "\n\nBest Regards,\nLeo Kavindya Gimhani\nClub Secretary\nLeo Club of Athugalpura" },
-    'general': { label: "General Club Signature", value: "\n\nBest Regards,\nLeo Club of Athugalpura\nLEO District 306 D9" }
+    'president': { label: "President's Signature", value: "\n\nBest Regards,\nDemo President\nClub President\nDemo Leo Club" },
+    'secretary': { label: "Secretary's Signature", value: "\n\nBest Regards,\nDemo Secretary\nClub Secretary\nDemo Leo Club" },
+    'general': { label: "General Club Signature", value: "\n\nBest Regards,\nDemo Leo Club\nLEO District Demo" }
 };
 
 export default function CommunicationPage() {
